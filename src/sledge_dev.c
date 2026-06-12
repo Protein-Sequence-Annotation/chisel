@@ -725,6 +725,7 @@ pipeline_thread(void *arg)
 
     /* Check against each target sequence */
     for (i = 0; i < info->sqdb->count; i++) {
+      if (info->si->no_self && strcmp(qsq->name, info->sqdb->list[i].name) == 0) continue; // Ignore self comparison
       ESL_SQ *tsq = info->sqdb->list + i;
       p7_pli_NewSeq(pli, tsq);
       p7_bg_SetLength(bg, tsq->n);
@@ -1252,7 +1253,7 @@ find_pid(P7_TRACE *tr, const ESL_SQ *sq,
 
   /* Compute pid and decision */
   *pid = match / q_length;
-  if si->flip {
+  if (si->flip) {
     *decision = (*pid > si->pid_low && *pid <= si->pid_high)
                   ? REJECT : ACCEPT;
   }
