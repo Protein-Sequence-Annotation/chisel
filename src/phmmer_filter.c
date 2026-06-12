@@ -78,6 +78,7 @@ static ESL_OPTIONS options[] = {
   { "--qblock",       eslARG_INT,        "10",    NULL, NULL,       NULL,  NULL,  NULL,              "max queries handled at a time",                               12 },
   { "--tblock",       eslARG_INT,        "1000",  NULL, NULL,       NULL,  NULL,  NULL,              "max targets handled at a time",                               12 },
   { "--all_hits",   eslARG_NONE,         FALSE,   NULL, NULL,       NULL,  NULL,  NULL,              "early stopping toggle",                                       12 },
+  { "--flip",       eslARG_NONE,         FALSE,   NULL, NULL,       NULL,  NULL,  NULL,              "flip accept/reject",                                          12 },
   { "--format",       eslARG_INT,         "1",    NULL, NULL,       NULL,  NULL,  NULL,              "output format",                                               12 },
   { "--halt",         eslARG_INT,        "-1",    NULL, NULL,       NULL,  NULL,  NULL,              "stop after n sequences - for debugging",                      12 },
   { "--suppress",     eslARG_NONE,       FALSE,   NULL, NULL,       NULL,  NULL,  NULL,              "turn off progress bar",                                       12 },
@@ -249,6 +250,7 @@ main(int argc, char **argv)
   si.out_path     = esl_opt_GetString  (go, "-o");
   si.task_id      = esl_opt_GetInteger (go, "--task_id");
   si.format       = esl_opt_GetInteger (go, "--format");
+  si.flip         = esl_opt_GetBoolean (go, "--flip");
   suppress        = esl_opt_GetBoolean (go, "--suppress");
   if (! esl_opt_IsOn(go, "-Z"))
     si.db_size = esl_opt_GetInteger(go, "--tblock");

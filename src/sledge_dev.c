@@ -733,6 +733,7 @@ pipeline_thread(void *arg)
       /* Run the p7 pipeline against current pair of sequences */
       status = p7_Pipeline_cust(pli, om, bg, tsq, qsq, th, ri, info->si);
       if (ri->decision == REJECT && info->si->early_stop) break;
+      p7_pipeline_Reuse(pli);
     }
 
     /* Destroy p7 objects */
@@ -1251,8 +1252,14 @@ find_pid(P7_TRACE *tr, const ESL_SQ *sq,
 
   /* Compute pid and decision */
   *pid = match / q_length;
-  *decision = (*pid > si->pid_low && *pid <= si->pid_high)
-                ? ACCEPT : REJECT;
+  if si->flip {
+    *decision = (*pid > si->pid_low && *pid <= si->pid_high)
+                  ? REJECT : ACCEPT;
+  }
+  else {
+    *decision = (*pid > si->pid_low && *pid <= si->pid_high)
+                  ? ACCEPT : REJECT;
+  }
 
   return eslOK;
 }

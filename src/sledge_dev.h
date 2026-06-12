@@ -62,6 +62,7 @@ typedef struct {
   bool   train_only;   /* Flag for train_only mode                */
   bool   test_only;    /* Flag for test_only mode                 */
   bool   low_only;     /* Flag to stop after test/val limit       */
+  bool   flip;         /* Flag to flip accept/reject              */
   float  train_frac;   /* Max train_fraction                      */
   int    init_chunk;   /* Initial query chunk size                */
   int    test_limit;   /* Minimum required test sequences         */
