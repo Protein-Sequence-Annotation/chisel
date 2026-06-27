@@ -4,14 +4,14 @@ set -u
 set -o pipefail
 
 if [[ $# -ne 1 ]]; then
-  echo "Usage: test_installation.sh <path_to_sledge>" >&2
-  echo "Example path: test_installation.sh software/sledge" >&2
+  echo "Usage: test_installation.sh <path_to_CHISEL>" >&2
+  echo "Example path: test_installation.sh software/CHISEL" >&2
   echo "Example (current directory): test_installation.sh ." >&2
   exit 2
 fi
-SLEDGE_DIR="$(cd "$1" && pwd)"
+CHISEL_DIR="$(cd "$1" && pwd)"
 
-ROOT_DIR="${SLEDGE_DIR}/install"
+ROOT_DIR="${CHISEL_DIR}/install"
 RUN_ID="$(date +%Y%m%d_%H%M%S)"
 INFO_DIR="${ROOT_DIR}/info/install_${RUN_ID}"
 ARTIFACT_DIR="${INFO_DIR}/artifacts"
@@ -20,19 +20,19 @@ mkdir -p "${INFO_DIR}" "${ARTIFACT_DIR}"
 
 TEST_FASTA="${ROOT_DIR}/test_db.fasta"
 
-SPLITTER_BIN="${SLEDGE_DIR}/bin/sledge_splitter"
-PHMMER_FILTER_BIN="${SLEDGE_DIR}/bin/phmmer_filter"
-SLEDGE_FILTER_BIN="${SLEDGE_DIR}/bin/sledge_filter"
+SPLITTER_BIN="${CHISEL_DIR}/bin/chisel_p1"
+PHMMER_FILTER_BIN="${CHISEL_DIR}/bin/phmmer_filter"
+CHISEL_FILTER_BIN="${CHISEL_DIR}/bin/chisel_p3"
 
 TOTAL=0
 PASSED=0
 FAILED=0
 SKIPPED=0
 
-# Paths for sledge_filter integration (pmbs pipeline).
+# Paths for chisel_p3 integration (pmbs pipeline).
 # Accept MMSEQS_BIN or MMSEQS (same for BLAST_DIR_*, FASTA_DIR_*). If unset and not on PATH, values are read from test_filter.config.
-# In test_filter.config, MMSEQS / BLAST_DIR / FASTA_DIR may be relative to SLEDGE_DIR (e.g. external_tools/mmseqs/bin/mmseqs).
-# sledge_filter runs with cwd under install/info/.../artifacts/...; relative paths would resolve there and fail. Expand to absolute paths before export.
+# In test_filter.config, MMSEQS / BLAST_DIR / FASTA_DIR may be relative to CHISEL_DIR (e.g. external_tools/mmseqs/bin/mmseqs).
+# chisel_p3 runs with cwd under install/info/.../artifacts/...; relative paths would resolve there and fail. Expand to absolute paths before export.
 MMSEQS_BIN="${MMSEQS_BIN:-${MMSEQS:-}}"
 BLAST_DIR_BIN="${BLAST_DIR_BIN:-${BLAST_DIR:-}}"
 FASTA_DIR_BIN="${FASTA_DIR_BIN:-${FASTA_DIR:-}}"
@@ -46,24 +46,24 @@ load_filter_paths_from_config() {
   return 0
 }
 
-# If path is not absolute, treat it as relative to SLEDGE_DIR (matches shipped test_filter.config layout).
-abs_tool_path_from_sledge() {
+# If path is not absolute, treat it as relative to CHISEL_DIR (matches shipped test_filter.config layout).
+abs_tool_path_from_chisel() {
   local p="$1"
   [[ -z "${p}" ]] && { echo ""; return; }
   if [[ "${p}" == /* ]]; then
     echo "${p}"
   else
-    echo "${SLEDGE_DIR}/${p}"
+    echo "${CHISEL_DIR}/${p}"
   fi
 }
 
-# Fill optional tool paths from test_filter.config, then make them cwd-independent for sledge_filter.
+# Fill optional tool paths from test_filter.config, then make them cwd-independent for chisel_filter.
 load_filter_paths_from_config || true
-MMSEQS_BIN="$(abs_tool_path_from_sledge "${MMSEQS_BIN}")"
-BLAST_DIR_BIN="$(abs_tool_path_from_sledge "${BLAST_DIR_BIN}")"
-FASTA_DIR_BIN="$(abs_tool_path_from_sledge "${FASTA_DIR_BIN}")"
+MMSEQS_BIN="$(abs_tool_path_from_chisel "${MMSEQS_BIN}")"
+BLAST_DIR_BIN="$(abs_tool_path_from_chisel "${BLAST_DIR_BIN}")"
+FASTA_DIR_BIN="$(abs_tool_path_from_chisel "${FASTA_DIR_BIN}")"
 # run_test uses bash -lc; exported vars are visible to write_filter_config_to inside the child shell.
-export SLEDGE_DIR MMSEQS_BIN BLAST_DIR_BIN FASTA_DIR_BIN PHMMER_FILTER_BIN ROOT_DIR
+export CHISEL_DIR MMSEQS_BIN BLAST_DIR_BIN FASTA_DIR_BIN PHMMER_FILTER_BIN ROOT_DIR
 
 # Build a runnable config from test_filter.config with portable tool paths (keep in sync with test_filter.config).
 write_filter_config_to() {
@@ -80,7 +80,7 @@ write_filter_config_to() {
 
 print_banner() {
   echo "============================================================"
-  echo "Sledge installation/functionality test"
+  echo "Chisel installation/functionality test"
   echo "Run ID: ${RUN_ID}"
   echo "Results: ${INFO_DIR}"
   echo "Per-test logs (stdout/stderr): ${INFO_DIR}/artifacts/<NNN>_*/stdout.log and stderr.log"
@@ -89,12 +89,12 @@ print_banner() {
 
 check_prereqs() {
   local ok=0
-  if [[ ! -d "${SLEDGE_DIR}" ]]; then
-    echo "[FATAL] SLEDGE_DIR does not exist: ${SLEDGE_DIR}"
+  if [[ ! -d "${CHISEL_DIR}" ]]; then
+    echo "[FATAL] CHISEL_DIR does not exist: ${CHISEL_DIR}"
     ok=1
   fi
   if [[ ! -d "${ROOT_DIR}" ]]; then
-    echo "[FATAL] Missing install directory under SLEDGE_DIR: ${ROOT_DIR}"
+    echo "[FATAL] Missing install directory under CHISEL_DIR: ${ROOT_DIR}"
     ok=1
   fi
   if [[ ! -f "${TEST_FASTA}" ]]; then
@@ -102,15 +102,15 @@ check_prereqs() {
     ok=1
   fi
   if [[ ! -x "${SPLITTER_BIN}" ]]; then
-    echo "[FATAL] sledge_splitter not found/executable in bin/ or src/"
+    echo "[FATAL] chisel_p1 not found/executable in bin/ or src/"
     ok=1
   fi
   if [[ ! -x "${PHMMER_FILTER_BIN}" ]]; then
     echo "[FATAL] phmmer_filter not found/executable in bin/ or src/"
     ok=1
   fi
-  if [[ ! -x "${SLEDGE_FILTER_BIN}" ]]; then
-    echo "[FATAL] sledge_filter not found/executable in bin/"
+  if [[ ! -x "${CHISEL_FILTER_BIN}" ]]; then
+    echo "[FATAL] chisel_p3 not found/executable in bin/"
     ok=1
   fi
   if [[ ! -f "${ROOT_DIR}/test_filter.config" ]]; then
@@ -230,7 +230,7 @@ print_banner
 check_prereqs || exit 2
 
 # ---------------------------
-# sledge_splitter tests
+# chisel_p1 tests
 # ---------------------------
 # Shared splitter flags (no -Z / output dir here so invalid -Z and custom-path tests can vary).
 SPLIT_BASE_OPTS="--seed 42 --suppress"
@@ -320,7 +320,7 @@ run_test \
    test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 # ---------------------------
-# sledge_filter tests
+# chisel_p3 tests
 # ---------------------------
 # Base without -Z / qblock / tblock so invalid -Z and undersized block tests set each once.
 COMMON_FILTER_BASE="--seed 42 --suppress"
@@ -383,64 +383,64 @@ run_test \
   "'${PHMMER_FILTER_BIN}' ${COMMON_FILTER_BASE} -Z 500000 --cpu 1 --qsize 1 --format 0 --qblock 100 --tblock 5 -o filt_small_tblock '${TEST_FASTA}' '${TEST_FASTA}'"
 
 # ---------------------------
-# sledge_filter (pmbs pipeline) integration
+# chisel_p3 (pmbs pipeline) integration
 # ---------------------------
 run_test \
-  "sledge_filter pipeline pmbs install integration" \
+  "chisel_p3 pipeline pmbs install integration" \
   0 \
-  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
+  "write_filter_config_to ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/blast_check && test -d filter_test/sw_check"
 
 run_test \
-  "sledge_filter pipeline spm order" \
+  "chisel_p3 pipeline spm order" \
   0 \
-  "write_filter_config_to ft.config && '${SLEDGE_FILTER_BIN}' --order spm --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
+  "write_filter_config_to ft.config && '${CHISEL_FILTER_BIN}' --order spm --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/sw_check"
 
 run_test \
-  "sledge_filter missing required args" \
+  "chisel_p3 missing required args" \
   1 \
-  "'${SLEDGE_FILTER_BIN}'"
+  "'${CHISEL_FILTER_BIN}'"
 
 run_test \
-  "sledge_filter missing config file" \
+  "chisel_p3 missing config file" \
   1 \
-  "'${SLEDGE_FILTER_BIN}' --order pmbs --config ./does_not_exist_$$.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "'${CHISEL_FILTER_BIN}' --order pmbs --config ./does_not_exist_$$.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter empty config missing OUT_DIR" \
+  "chisel_p3 empty config missing OUT_DIR" \
   1 \
-  ": > empty.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./empty.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  ": > empty.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./empty.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter unknown order character" \
+  "chisel_p3 unknown order character" \
   1 \
-  "'${SLEDGE_FILTER_BIN}' --order pmxs --config ./irrelevant.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "'${CHISEL_FILTER_BIN}' --order pmxs --config ./irrelevant.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter invalid REMOVE_TARGET in config" \
+  "chisel_p3 invalid REMOVE_TARGET in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter invalid SLEDGE_CORES in config" \
+  "chisel_p3 invalid CHISEL_CORES in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^SLEDGE_CORES=.*/SLEDGE_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^CHISEL_CORES=.*/CHISEL_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter invalid SLEDGE_FILTER path in config" \
+  "chisel_p3 invalid CHISEL_FILTER path in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's|^PHMMER_FILTER=.*|PHMMER_FILTER=\"/nonexistent/phmmer_filter\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's|^PHMMER_FILTER=.*|PHMMER_FILTER=\"/nonexistent/phmmer_filter\"|' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter invalid MMSEQS path in config" \
+  "chisel_p3 invalid MMSEQS path in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's|^MMSEQS=.*|MMSEQS=\"/nonexistent/mmseqs\"|' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's|^MMSEQS=.*|MMSEQS=\"/nonexistent/mmseqs\"|' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "sledge_filter invalid Z_SIZE in config" \
+  "chisel_p3 invalid Z_SIZE in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^Z_SIZE=.*/Z_SIZE=\"0\"/' ft.config > ft2.config && mv ft2.config ft.config && '${SLEDGE_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^Z_SIZE=.*/Z_SIZE=\"0\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 print_summary
 

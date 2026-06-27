@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Build ssearch36 and install to <sledge_dir>/external_tools/fasta36/bin.
+# Build ssearch36 and install to <chisel_dir>/external_tools/fasta36/bin.
 #
 # Usage:
-#   install/fasta36_install.sh <sledge_dir> <makefile-relative-to-src>...
+#   install/fasta36_install.sh <chisel_dir> <makefile-relative-to-src>...
 #
 # Environment:
 #   FASTA36_MODE          custom (default) | legacy
 #   FASTA36_JOBS          parallel make -j (default: nproc / sysctl)
-#   FASTA36_CUSTOM_REPO   optional git URL for Sledge fasta36 when published
+#   FASTA36_CUSTOM_REPO   optional git URL for CHISEL fasta36 when published
 #   FASTA36_CUSTOM_REF    branch/tag for FASTA36_CUSTOM_REPO (default: main)
 #   FASTA36_LEGACY_REPO   upstream clone URL (default: wrpearson/fasta36)
 #   FASTA36_LEGACY_REF    upstream branch/tag (default: master)
@@ -57,12 +57,12 @@ fasta36_try_build() {
 }
 
 fasta36_install_legacy() {
-  local sledge_dir="$1"
+  local chisel_dir="$1"
   shift
   local -a makefiles=("$@")
-  local external="${sledge_dir}/external_tools"
+  local external="${chisel_dir}/external_tools"
   local workdir="${external}/.downloads"
-  local patch="${sledge_dir}/install/patches/fasta36-gcc-prototypes.patch"
+  local patch="${chisel_dir}/install/patches/fasta36-gcc-prototypes.patch"
   local legacy_repo="${FASTA36_LEGACY_REPO:-https://github.com/wrpearson/fasta36.git}"
   local legacy_ref="${FASTA36_LEGACY_REF:-master}"
   local src_root="${external}/fasta36-src"
@@ -92,10 +92,10 @@ fasta36_install_legacy() {
 }
 
 fasta36_install_custom() {
-  local sledge_dir="$1"
+  local chisel_dir="$1"
   shift
   local -a makefiles=("$@")
-  local external="${sledge_dir}/external_tools"
+  local external="${chisel_dir}/external_tools"
   local workdir="${external}/.downloads"
   local bundled="${external}/fasta36"
   local src_root="${bundled}"
@@ -133,21 +133,21 @@ fasta36_install_custom() {
 }
 
 fasta36_install() {
-  local sledge_dir="$1"
+  local chisel_dir="$1"
   shift
   local -a makefiles=("$@")
   local mode="${FASTA36_MODE:-custom}"
 
-  [[ -d "${sledge_dir}" ]] || die "not a directory: ${sledge_dir}"
+  [[ -d "${chisel_dir}" ]] || die "not a directory: ${chisel_dir}"
   [[ ${#makefiles[@]} -gt 0 ]] || die "supply at least one FASTA makefile path (relative to src/)"
 
   need_cmd make
   case "${mode}" in
     custom)
-      fasta36_install_custom "${sledge_dir}" "${makefiles[@]}"
+      fasta36_install_custom "${chisel_dir}" "${makefiles[@]}"
       ;;
     legacy)
-      fasta36_install_legacy "${sledge_dir}" "${makefiles[@]}"
+      fasta36_install_legacy "${chisel_dir}" "${makefiles[@]}"
       ;;
     *)
       die "FASTA36_MODE must be 'custom' or 'legacy' (got: ${mode})"
@@ -156,6 +156,6 @@ fasta36_install() {
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  [[ $# -ge 2 ]] || die "usage: $0 <sledge_dir> <makefile-relative-to-src>..."
+  [[ $# -ge 2 ]] || die "usage: $0 <chisel_dir> <makefile-relative-to-src>..."
   fasta36_install "$@"
 fi

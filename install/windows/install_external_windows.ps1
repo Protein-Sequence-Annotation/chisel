@@ -1,15 +1,15 @@
 param(
   [Parameter(Mandatory = $true)]
-  [string]$SledgeDir
+  [string]$ChiselDir
 )
 
 $ErrorActionPreference = "Stop"
 
-if (-not (Test-Path -Path $SledgeDir -PathType Container)) {
-  throw "SledgeDir does not exist: $SledgeDir"
+if (-not (Test-Path -Path $ChiselDir -PathType Container)) {
+  throw "ChiselDir does not exist: $ChiselDir"
 }
 
-$resolved = (Resolve-Path $SledgeDir).Path
+$resolved = (Resolve-Path $ChiselDir).Path
 $linuxInstaller = "$resolved/install/linux/install_external_linux.sh"
 
 Write-Host "[install_external_windows] Windows support is provided via WSL2."
@@ -29,4 +29,4 @@ wsl.exe bash -lc "bash '$wslInstaller' '$wslRepo'"
 
 Write-Host ""
 Write-Host "[install_external_windows] Done."
-Write-Host "Use the generated external_tools paths from inside WSL for sledge_filter config."
+Write-Host "Use the generated external_tools paths from inside WSL for chisel_p3 config."
