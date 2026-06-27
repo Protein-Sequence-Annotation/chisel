@@ -120,11 +120,6 @@ $(BIN)/chisel_p3: $(ROOT)/src/chisel_p3.sh
 	@mkdir -p $(dir $@)
 	cp $< $@
 	chmod +x $@
-
-$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
-	@mkdir -p $(dir $@)
-	cp $< $@
-	chmod +x $@
 endif
 
 # SIMD intrinsics for impl_* and Easel vector math
