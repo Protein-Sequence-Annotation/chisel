@@ -65,7 +65,7 @@ EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
 .PHONY: all libs clean distclean install-external test-install
 
-all: $(BIN)/chisel_p1$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/chisel_p3 $(BIN)/chisel_filter
+all: $(BIN)/chisel_p1$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/chisel_p3 $(BIN)/chisel_p3
 
 libs: $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 
@@ -99,12 +99,6 @@ $(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/chisel_dev
 $(BIN)/chisel_p3: $(ROOT)/src/chisel_p3.sh
 	@mkdir -p $(BIN) $(BUILD)
 	@t=$$(mktemp "$(BUILD)/chisel_p3.XXXXXX"); \
-	cp $< "$$t" && chmod +x "$$t" && \
-	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
-
-$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
-	@mkdir -p $(BIN) $(BUILD)
-	@t=$$(mktemp "$(BUILD)/chisel_filter.XXXXXX"); \
 	cp $< "$$t" && chmod +x "$$t" && \
 	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
 else
