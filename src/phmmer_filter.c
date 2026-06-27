@@ -21,7 +21,7 @@
 #include "esl_threads.h"
 
 #include "hmmer.h"
-#include "sledge_dev.h"
+#include "chisel_dev.h"
 
 /**
  * @name Command Line Options
