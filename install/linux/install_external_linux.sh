@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install MMseqs2, NCBI BLAST+, and FASTA36 into <sledge_dir>/external_tools (Linux).
 # Detects CPU (x86_64 vs aarch64) and picks matching upstream binaries / FASTA makefiles.
+# FASTA36: FASTA36_MODE=custom (default) or legacy — see install/fasta36_install.sh.
 
 set -euo pipefail
 
@@ -13,9 +14,6 @@ fi
 [[ -d "$1" ]] || die "not a directory: $1"
 SLEDGE_DIR="$(cd "$1" && pwd)"
 [[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
-
-INSTALL_LINUX_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FASTA36_PATCH="${INSTALL_LINUX_DIR}/../patches/fasta36-gcc-prototypes.patch"
 
 EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
@@ -63,17 +61,13 @@ case "${machine}" in
 esac
 
 need_cmd tar
-need_cmd git
 need_cmd make
-need_cmd patch
 
 MMSEQS_TAG="${MMSEQS_TAG:-18-8cc5c}"
 BLAST_VERSION="${BLAST_VERSION:-2.15.0}"
-FASTA36_REF="${FASTA36_REF:-master}"
 
 MMSEQS_URL="https://github.com/soedinglab/MMseqs2/releases/download/${MMSEQS_TAG}/mmseqs-linux-${MMSEQS_ARCH}.tar.gz"
 BLAST_URL="https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/${BLAST_VERSION}/ncbi-blast-${BLAST_VERSION}+-${BLAST_PLATFORM}.tar.gz"
-FASTA36_REPO="https://github.com/wrpearson/fasta36.git"
 
 echo "[install_external_linux] Sledge root: ${SLEDGE_DIR}"
 echo "[install_external_linux] Install prefix: ${EXTERNAL}"
@@ -102,27 +96,12 @@ if [[ "${SKIP_BLAST:-0}" != "1" ]]; then
 fi
 
 if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
-  echo "[install_external_linux] Building FASTA36..."
-  fasta_src="${WORKDIR}/fasta36"
-  rm -rf "${fasta_src}" "${EXTERNAL}/fasta36"
-  git clone --depth 1 --branch "${FASTA36_REF}" "${FASTA36_REPO}" "${fasta_src}" 2>/dev/null || git clone --depth 1 "${FASTA36_REPO}" "${fasta_src}"
-  mv "${fasta_src}" "${EXTERNAL}/fasta36"
-  [[ -f "${FASTA36_PATCH}" ]] || die "missing patch file: ${FASTA36_PATCH}"
-  patch -d "${EXTERNAL}/fasta36" -p1 --forward <"${FASTA36_PATCH}" || die "fasta36 prototype patch failed"
-  pushd "${EXTERNAL}/fasta36/src" >/dev/null
-  built=0
-  for mk in "${FASTA_MAKEFILES[@]}"; do
-    if [[ -f "${mk}" ]]; then
-      echo "[install_external_linux] FASTA36 trying ${mk}"
-      if make -f "${mk}" -j"$(nproc 2>/dev/null || echo 4)" all; then
-        built=1
-        break
-      fi
-    fi
-  done
-  popd >/dev/null
-  [[ "${built}" -eq 1 ]] || die "fasta36 build failed for Linux (${machine})"
-  [[ -x "${EXTERNAL}/fasta36/bin/ssearch36" ]] || die "ssearch36 missing after build"
+  INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+  FASTA36_MODE="${FASTA36_MODE:-custom}"
+  echo "[install_external_linux] FASTA36 mode: ${FASTA36_MODE}"
+  # shellcheck source=../fasta36_install.sh
+  source "${INSTALL_DIR}/fasta36_install.sh"
+  fasta36_install "${SLEDGE_DIR}" "${FASTA_MAKEFILES[@]}"
 fi
 
 echo ""

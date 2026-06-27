@@ -65,7 +65,7 @@ EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
 .PHONY: all libs clean distclean install-external test-install
 
-all: $(BIN)/sledge_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/sledge_filter
+all: $(BIN)/sledge_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/sledge_filter $(BIN)/chisel_filter
 
 libs: $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 
@@ -101,6 +101,12 @@ $(BIN)/sledge_filter: $(ROOT)/src/sledge_filter.sh
 	@t=$$(mktemp "$(BUILD)/sledge_filter.XXXXXX"); \
 	cp $< "$$t" && chmod +x "$$t" && \
 	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+
+$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/chisel_filter.XXXXXX"); \
+	cp $< "$$t" && chmod +x "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
 else
 $(BIN)/sledge_splitter$(EXE): $(BUILD)/src/sledge_splitter.o $(BUILD)/src/sledge_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(dir $@)
@@ -111,6 +117,11 @@ $(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/sledge_dev
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BIN)/sledge_filter: $(ROOT)/src/sledge_filter.sh
+	@mkdir -p $(dir $@)
+	cp $< $@
+	chmod +x $@
+
+$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
 	@mkdir -p $(dir $@)
 	cp $< $@
 	chmod +x $@

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install MMseqs2, BLAST+, and FASTA36 for macOS.
 # Uses Homebrew for MMseqs2/BLAST+ when available; otherwise falls back to
-# upstream tarball downloads. FASTA36 is always built from source.
+# upstream tarball downloads. FASTA36: FASTA36_MODE=custom (default) or legacy.
 
 set -euo pipefail
 
@@ -57,7 +57,6 @@ case "${MAC_ARCH}" in
 esac
 
 INSTALL_MACOS_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FASTA36_PATCH="${INSTALL_MACOS_DIR}/../patches/fasta36-gcc-prototypes.patch"
 
 USE_BREW=0
 if command -v brew >/dev/null 2>&1; then
@@ -74,13 +73,9 @@ EXTERNAL="${SLEDGE_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
 mkdir -p "${WORKDIR}"
 
-need_cmd git
 need_cmd make
-need_cmd patch
 need_cmd tar
 
-FASTA36_REF="${FASTA36_REF:-master}"
-FASTA36_REPO="https://github.com/wrpearson/fasta36.git"
 MMSEQS_TAG="${MMSEQS_TAG:-18-8cc5c}"
 MMSEQS_MACOS_ASSET="${MMSEQS_MACOS_ASSET:-osx-universal}"
 BLAST_VERSION="${BLAST_VERSION:-2.15.0}"
@@ -131,29 +126,12 @@ fi
 
 if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   need_cmd codesign
-  echo "[install_external_macos] Building FASTA36..."
-  fasta_src="${WORKDIR}/fasta36"
-  rm -rf "${fasta_src}" "${EXTERNAL}/fasta36-src"
-  git clone --depth 1 --branch "${FASTA36_REF}" "${FASTA36_REPO}" "${fasta_src}" 2>/dev/null || git clone --depth 1 "${FASTA36_REPO}" "${fasta_src}"
-  mv "${fasta_src}" "${EXTERNAL}/fasta36-src"
-  [[ -f "${FASTA36_PATCH}" ]] || die "missing patch file: ${FASTA36_PATCH}"
-  patch -d "${EXTERNAL}/fasta36-src" -p1 --forward <"${FASTA36_PATCH}" || die "fasta36 prototype patch failed"
-
-  pushd "${EXTERNAL}/fasta36-src/src" >/dev/null
-  built=0
-  for mk in "${FASTA_MAKEFILES[@]}"; do
-    if [[ -f "${mk}" ]]; then
-      echo "[install_external_macos] FASTA36 trying ${mk}"
-      if make -f "${mk}" -j"$(sysctl -n hw.ncpu 2>/dev/null || echo 4)" all; then
-        built=1
-        break
-      fi
-    fi
-  done
-  popd >/dev/null
-  [[ "${built}" -eq 1 ]] || die "fasta36 build failed for macOS (${MAC_ARCH})"
-  BUILT_SSEARCH="${EXTERNAL}/fasta36-src/bin/ssearch36"
-  BIN="${EXTERNAL}/fasta36/bin"
+  FASTA36_MODE="${FASTA36_MODE:-custom}"
+  echo "[install_external_macos] FASTA36 mode: ${FASTA36_MODE}"
+  # shellcheck source=../fasta36_install.sh
+  source "${INSTALL_MACOS_DIR}/../fasta36_install.sh"
+  fasta36_install "${SLEDGE_DIR}" "${FASTA_MAKEFILES[@]}"
+  BUILT_SSEARCH="${EXTERNAL}/fasta36/bin/ssearch36"
   [[ -f "${BUILT_SSEARCH}" ]] || die "ssearch36 missing after build"
   # Build outputs written straight into bin/ confuse Gatekeeper/codesign; stage via tmp, sign, then install.
   tmp_exe="$(mktemp "${TMPDIR:-/tmp}/ssearch36.XXXXXX")"
@@ -162,8 +140,8 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   cp "${BUILT_SSEARCH}" "${tmp_exe}"
   chmod +x "${tmp_exe}"
   codesign --force --sign - "${tmp_exe}" || die "codesign failed for ssearch36 (tmp ${tmp_exe})"
-  cp "${tmp_exe}" "${BIN}/ssearch36"
-  chmod +x "${BIN}/ssearch36"
+  cp "${tmp_exe}" "${BUILT_SSEARCH}"
+  chmod +x "${BUILT_SSEARCH}"
   cleanup_tmp
   trap - EXIT
 fi

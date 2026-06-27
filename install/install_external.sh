@@ -4,7 +4,9 @@
 # Usage:
 #   install/install_external.sh <sledge_dir>
 #
-# FASTA36: patch(1) applies install/patches/fasta36-gcc-prototypes.patch (see README), then build.
+# FASTA36: FASTA36_MODE=custom (default, bundled Sledge tree) or legacy (upstream + patch).
+#   Optional: FASTA36_CUSTOM_REPO / FASTA36_CUSTOM_REF when the Sledge fork is published.
+#   Legacy: FASTA36_LEGACY_REPO / FASTA36_LEGACY_REF (defaults: wrpearson/fasta36, master).
 #
 # Routes to:
 #   install/linux/install_external_linux.sh

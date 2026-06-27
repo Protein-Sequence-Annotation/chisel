@@ -122,7 +122,13 @@ You can still call the dispatcher directly if needed:
 ./install/install_external.sh /path/to/sledge
 ```
 
-The [fasta36](https://github.com/wrpearson/fasta36) checkout used by the installer needs compatibility patches to build with current GCC and Clang; see [FASTA36 GCC patches](#fasta36-gcc-patches) near the end of this README.
+The bundled [external_tools/fasta36](external_tools/fasta36) tree includes Sledge's query-parallel `ssearch36`; `make install-external` builds it by default (`FASTA36_MODE=custom`). For upstream FASTA36 with GCC compatibility patches, use legacy mode:
+
+```bash
+FASTA36_MODE=legacy make install-external
+```
+
+Set `SW_LEGACY=1` in your filter config when using the legacy binary (see `dev/filt_test/test_filter.config`). Optional overrides: `FASTA36_LEGACY_REPO`, `FASTA36_LEGACY_REF`, `FASTA36_CUSTOM_REPO`, `FASTA36_CUSTOM_REF` (for a remote Sledge fork when available).
 
 **macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`, native for Intel vs Apple Silicon) when available, and otherwise falls back to direct upstream tarball downloads (`mmseqs-osx-universal`, `ncbi-blast-<version>+-x64-macosx` by default). FASTA36 is built from source, choosing FASTA makefiles by **`uname -m`** (ARM Macs no longer prefer x86-only makefiles first). Optional overrides: `MMSEQS_TAG`, `MMSEQS_MACOS_ASSET`, `BLAST_VERSION`, `BLAST_PLATFORM`.
 
@@ -353,35 +359,30 @@ For sledge_filter pipeline behavior and defaults, read the comments at the top o
 
 ---
 
-## FASTA36 GCC patches
+## FASTA36 build notes
 
-Upstream [wrpearson/fasta36](https://github.com/wrpearson/fasta36) predates strict ISO C defaults and C23 keywords in recent compilers. Sledge ships a unified diff so the cloned sources compile cleanly on typical Linux and macOS toolchains.
+Sledge ships a modified [FASTA36](external_tools/fasta36) tree (query-parallel `ssearch36`, BL62/Karlin–Altschul defaults). Installers build via `install/fasta36_install.sh`:
 
-### Patch file and tooling
+| `FASTA36_MODE` | Source | Output |
+|----------------|--------|--------|
+| `custom` (default) | Bundled `external_tools/fasta36` | `external_tools/fasta36/bin/ssearch36` |
+| `legacy` | Clone [wrpearson/fasta36](https://github.com/wrpearson/fasta36) + patch | `external_tools/fasta36/bin/ssearch36` (source under `fasta36-src/`) |
 
-| Item | Location / note |
-|------|-----------------|
+When the Sledge fork is published separately, set `FASTA36_CUSTOM_REPO` (and optionally `FASTA36_CUSTOM_REF`) to fetch it instead of the bundled tree.
+
+See [external_tools/fasta36/README_SLEDGE.md](external_tools/fasta36/README_SLEDGE.md) for manual build commands and chisel-oriented flags.
+
+### Legacy GCC patch
+
+Upstream FASTA36 predates strict ISO C defaults on recent GCC/Clang. Legacy mode applies `install/patches/fasta36-gcc-prototypes.patch` after cloning. Requires **`git`**, **`patch`**, and **`make`** on `PATH`.
+
+| Item | Location |
+|------|----------|
 | Patch | `install/patches/fasta36-gcc-prototypes.patch` |
-| Applied by | Linux/macOS installers after `git clone` (see `install/linux/install_external_linux.sh`, `install/macos/install_external_macos.sh`) |
-| System dependency | The **`patch`** command must be on `PATH` (install the `patch` package on minimal images if needed). The patch *file* is part of this repo; only the `patch` binary is external. |
+| Default upstream ref | `FASTA36_LEGACY_REF=master` |
+| Installer | `install/fasta36_install.sh` (used by Linux/macOS scripts) |
 
-### Scope (13 files under `src/`)
-
-Patches are **cumulative**: partial fixes (e.g. only mmap prototypes) are not enough. Grouped by theme:
-
-- **Headers / mmap:** `altlib.h`, `mm_file.h`, `mmgetaa.c` — correct prototypes and function-pointer types for library and mmap readers.
-- **C23 / syntax:** `pssm_asn_subs.c` — avoid the `bool` keyword clash; full `parse_pssm_*` prototypes. `lsim4.h` — `#include <stdbool.h>` instead of `typedef int bool`.
-- **Tool front-ends:** `map_db.c` — typed function pointers for `get_entry` / `get_ent_arr`. `initfa.c` — ANSI `sortbest`, safer `get_lambda` allocation. `compacc2e.c` — bounded `calloc` for annotation tables; on UNIX, `mktemp` replaced with `mkstemp` for the temp library DB path.
-- **FastA/FastX drops:** `dropfx2.c`, `dropfz3.c` — K&R-style forward declarations, `lx_band` / `ckalloc`, `kssort`, `global` / `small_global` / `global_up` / `global_down` (including `const` sequence pointers where needed), `fatal`. `dropfs2.c`, `dropff2.c`, `dropnfa.c` — ANSI prototypes for shell-sort helpers (`kssort`, `kpsort`, `krsort`) and `savemax` where applicable.
-
-### Branch and maintenance
-
-- Installers default to **`FASTA36_REF=master`** (see `install/install_external.sh`). The patch is generated against **`master`**. If GitHub’s default branch or your chosen tag diverges, line numbers may not match—regenerate the diff from a clean checkout of that revision, or use `master`.
-- If upstream edits the same lines on `master`, refresh the patch from a fresh clone and re-run the install build.
-
-### Hosts without `patch`
-
-Nothing in the repo vendors a `patch` binary today. For air-gapped or minimal hosts, you could ship a static GNU `patch` (e.g. under `install/bin/`) and invoke it from the installers.
+If upstream changes the patched files, regenerate the diff from a clean checkout of the target ref and retry `FASTA36_MODE=legacy make install-external`.
 
 ---
 
