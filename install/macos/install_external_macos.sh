@@ -19,12 +19,12 @@ fetch() {
 }
 
 if [[ $# -ne 1 ]]; then
-  echo "Usage: $0 <sledge_dir>" >&2
+  echo "Usage: $0 <chisel_dir>" >&2
   exit 2
 fi
 [[ -d "$1" ]] || die "not a directory: $1"
-SLEDGE_DIR="$(cd "$1" && pwd)"
-[[ -f "${SLEDGE_DIR}/Makefile" ]] || die "does not look like sledge root: ${SLEDGE_DIR}"
+CHISEL_DIR="$(cd "$1" && pwd)"
+[[ -f "${CHISEL_DIR}/Makefile" ]] || die "does not look like chisel root: ${CHISEL_DIR}"
 [[ "$(uname -s)" == "Darwin" ]] || die "this script is macOS-only"
 
 MAC_ARCH="$(uname -m)"
@@ -69,7 +69,7 @@ else
   echo "[install_external_macos] uname -m=${MAC_ARCH} (brew not found; using tarball fallback for mmseqs2/blast)"
 fi
 
-EXTERNAL="${SLEDGE_DIR}/external_tools"
+EXTERNAL="${CHISEL_DIR}/external_tools"
 WORKDIR="${EXTERNAL}/.downloads"
 mkdir -p "${WORKDIR}"
 
@@ -130,7 +130,7 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   echo "[install_external_macos] FASTA36 mode: ${FASTA36_MODE}"
   # shellcheck source=../fasta36_install.sh
   source "${INSTALL_MACOS_DIR}/../fasta36_install.sh"
-  fasta36_install "${SLEDGE_DIR}" "${FASTA_MAKEFILES[@]}"
+  fasta36_install "${CHISEL_DIR}" "${FASTA_MAKEFILES[@]}"
   BUILT_SSEARCH="${EXTERNAL}/fasta36/bin/ssearch36"
   [[ -f "${BUILT_SSEARCH}" ]] || die "ssearch36 missing after build"
   # Build outputs written straight into bin/ confuse Gatekeeper/codesign; stage via tmp, sign, then install.
@@ -147,7 +147,7 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
 fi
 
 echo ""
-echo "Done. Point sledge_filter config at:"
+echo "Done. Point chisel_p3 config at:"
 echo "  MMSEQS=\"${EXTERNAL}/mmseqs/bin/mmseqs\""
 echo "  BLAST_DIR=\"${EXTERNAL}/ncbi-blast/bin\""
 echo "  FASTA_DIR=\"${EXTERNAL}/fasta36/bin\""
