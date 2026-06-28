@@ -20,12 +20,28 @@
 
 set -euo pipefail
 
-# Two-pass rm for tmp/tool dirs (NFS / open handles). Failures do not abort the script (set -e).
+# Best-effort recursive remove (NFS stale handles, open files). Never aborts the script.
 rm_rf_retry() {
+  local path attempt
   [[ $# -eq 0 ]] && return 0
-  rm -rf "$@" || true
-  sleep 0.3
-  rm -rf "$@" || true
+  for path in "$@"; do
+    [[ -e "$path" || -L "$path" ]] || continue
+    for attempt in 1 2 3 4 5; do
+      chmod -R u+w "$path" 2>/dev/null || true
+      rm -rf "$path" 2>/dev/null && break
+      find "$path" -depth -mindepth 1 -delete 2>/dev/null || true
+      rm -rf "$path" 2>/dev/null && break
+      sleep "$attempt"
+    done
+    rm -rf "$path" 2>/dev/null || true
+  done
+  return 0
+}
+
+# Remove scratch paths unless KEEP_INTERMEDIATES is set.
+cleanup_unless_kept() {
+  [[ -n "${KEEP_INTERMEDIATES:-}" ]] && return 0
+  rm_rf_retry "$@"
 }
 
 # --- Argument parsing: required --order, --config, --fixed-file, --db-file; optional --out-suffix ---
@@ -414,7 +430,7 @@ run_mmseqs() {
       log_detail "Error: mmseqs search failed (pass 1: REMOVE -> other)"
       exit 1
     fi
-    rm_rf_retry "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1"*
+    cleanup_unless_kept "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1"*
 
     awk '{print $1}' "${out_mm}/mm_hits_pass1_${iteration}_${TASK_ID}.tsv" | sort -u > "$pass1_ids"
     pass1_hits=$(wc -l < "$pass1_ids")
@@ -437,9 +453,10 @@ run_mmseqs() {
       log_detail "Error: mmseqs search failed (pass 2: other -> pruned REMOVE)"
       exit 1
     fi
-    rm_rf_retry "${out_mm}/tmp_${iteration}_${TASK_ID}"*
-    rm -rf "${out_mm}/mm_remove_${iteration}_${TASK_ID}" "${out_mm}/mm_other_${iteration}_${TASK_ID}" \
-           "${out_mm}/mm_remove_pruned_${iteration}_${TASK_ID}"
+    cleanup_unless_kept "${out_mm}/tmp_${iteration}_${TASK_ID}"* \
+      "${out_mm}/mm_remove_${iteration}_${TASK_ID}" \
+      "${out_mm}/mm_other_${iteration}_${TASK_ID}" \
+      "${out_mm}/mm_remove_pruned_${iteration}_${TASK_ID}"
 
     awk '{print $2}' "${out_mm}/mm_hits_pass2_${iteration}_${TASK_ID}.tsv" | sort -u > "$pass2_ids"
     pass2_hits=$(wc -l < "$pass2_ids")
@@ -484,6 +501,13 @@ run_mmseqs() {
   fi
 
   echo "MMseqs2 stopping at iteration $iteration and removed ${mm_total_removed} seqs, took $((SECONDS - start))s"
+
+  cleanup_unless_kept \
+    "${out_mm}"/tmp_"${TASK_ID}"* \
+    "${out_mm}"/tmp_pass*_"${TASK_ID}"* \
+    "${out_mm}"/mm_remove_*_"${TASK_ID}" \
+    "${out_mm}"/mm_other_*_"${TASK_ID}" \
+    "${out_mm}"/mm_remove_pruned_*_"${TASK_ID}"
 }
 
 # --- BLAST (sequential two-pass pruning) ---
@@ -528,8 +552,9 @@ run_blast() {
   pass2_hits=$(wc -l < "$pass2_ids")
   local total_removed=$((pass1_hits + pass2_hits))
 
-  rm_rf_retry "${out_blast}/tmp_${TASK_ID}"*
-  rm -rf "${out_blast}/b_other_${TASK_ID}" "${out_blast}/b_remove_pruned_${TASK_ID}"
+  cleanup_unless_kept "${out_blast}/tmp_${TASK_ID}"* \
+    "${out_blast}/b_other_${TASK_ID}" \
+    "${out_blast}/b_remove_pruned_${TASK_ID}"
 
   if [[ "$REMOVE_TARGET" == "db" ]]; then
     remove_seqs_bash "$remove_pruned" "$pass2_ids" "$blast_out"
