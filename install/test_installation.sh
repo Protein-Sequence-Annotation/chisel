@@ -428,9 +428,9 @@ run_test \
   "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_filter invalid CHISEL_CORES in config" \
+  "chisel_filter invalid PHMMER_CORES in config" \
   1 \
-  "write_filter_config_to ft.config && sed 's/^CHISEL_CORES=.*/CHISEL_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
+  "write_filter_config_to ft.config && sed 's/^PHMMER_CORES=.*/PHMMER_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
   "chisel_filter invalid CHISEL_FILTER path in config" \
