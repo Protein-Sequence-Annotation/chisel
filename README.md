@@ -105,7 +105,7 @@ This installs MMseqs2, BLAST+, and FASTA tools into `sledge/external_tools` by d
 
 **Linux** (`install/linux/install_external_linux.sh`) selects downloads from `uname -m`: **x86_64** uses MMseqs2 `sse2` binaries and NCBI **x64-linux** BLAST; **aarch64**/**arm64** uses MMseqs2 **arm64** and NCBI **aarch64-linux** BLAST, and builds FASTA36 with non-SSE makefiles. Override MMseqs flavor with `MMSEQS_ARCH` (e.g. `avx2` on capable x86_64) or NCBI tarball name with `BLAST_PLATFORM` if needed.
 
-If external tools are already installed, point `sledge_filter` to them in your config (see `install/test_filter.config`):
+If external tools are already installed, point Chisel tools at them in your config (see `install/chisel.config`):
 
 | Config key | Set this to |
 |------------|-------------|
@@ -155,6 +155,31 @@ Direct Windows entrypoint is still available if needed:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\install\windows\test_installation_windows.ps1 -SledgeDir C:\path\to\sledge
 ```
+
+---
+
+## Configuration
+
+All Chisel pipeline scripts share a single config file: **`install/chisel.config`**.
+
+Copy it, set `CHISEL_ROOT` if your paths are relative to the repo root, and pass it to any tool:
+
+| Script | Example |
+|--------|---------|
+| `chisel_build` | `chisel_build --config my.config --input-db seqDB.fasta --output-dir out/` |
+| `chisel_dedup` | `chisel_dedup --config my.config --test-file test.fasta --val-file val.fasta --output-dir out/` |
+| `chisel_filter` | `chisel_filter --config my.config --order mbps --fixed-file test.fasta --db-file train.fasta` |
+
+Each script reads only the variables it needs. Unused sections (splitter, dedup, filter) are ignored.
+
+| Section | Used by |
+|---------|---------|
+| `SPLIT_*` | `chisel_build` (splitter step) |
+| `ORDER`, filter tools, `E_VALUE`, `Z_SIZE`, … | `chisel_build`, `chisel_filter` |
+| `DEDUP_*` | `chisel_dedup` |
+| `OUT_DIR`, `REMOVE_TARGET` | `chisel_filter` (standalone); `chisel_build` overrides these per filter step |
+
+`install/test_filter.config` is a minimal config used only by `make test-install`.
 
 ---
 

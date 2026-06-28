@@ -14,7 +14,7 @@
 #   --out-suffix SUFFIX      Optional. Suffix for tool output dirs (phmmer_<suffix>, mmseqs_<suffix>, etc.).
 #                            Default: TASK_ID from config. Use to separate outputs per run (e.g. 0_vs_0_0).
 #
-# Example: ./chisel_filter.sh --order pmb --config filter.config --fixed-file ../data/shards/shard_0.fasta --db-file ../data/distant_test.fasta
+# Example: ./chisel_filter.sh --order pmb --config install/chisel.config --fixed-file test.fasta --db-file train.fasta
 #
 # Set OUT_DIR, REMOVE_TARGET (db|fixed), KEEP_INTERMEDIATES, etc. in the config file.
 
@@ -117,7 +117,7 @@ OUT_SUFFIX="${OUT_SUFFIX_ARG:-${OUT_SUFFIX:-$TASK_ID}}"
 REMOVE_TARGET="${REMOVE_TARGET:-db}"
 E_VALUE="${E_VALUE:-0.01}"
 Z_SIZE="${Z_SIZE:-81514348}"
-SLEDGE_CORES="${SLEDGE_CORES:-96}"
+PHMMER_CORES="${PHMMER_CORES:-96}"
 MMSEQS_CORES="${MMSEQS_CORES:-96}"
 BLAST_CORES="${BLAST_CORES:-96}"
 SW_CORES="${SW_CORES:-96}"
@@ -139,7 +139,7 @@ if ! is_positive_uint "$Z_SIZE"; then
   echo "Z_SIZE must be a positive integer (got: ${Z_SIZE:-})" >&2
   exit 1
 fi
-for _cname in SLEDGE_CORES MMSEQS_CORES BLAST_CORES SW_CORES; do
+for _cname in PHMMER_CORES MMSEQS_CORES BLAST_CORES SW_CORES; do
   _cv="${!_cname}"
   if ! is_uint "${_cv}"; then
     echo "${_cname} must be a non-negative integer (got: ${_cv:-})" >&2
@@ -201,6 +201,10 @@ fi
 
 mkdir -p "$OUT_DIR"
 
+# Summary stats (timing, removal counts, completion) → stdout for callers that split .log / .err.
+# Tool verbose output (MMseqs, BLAST, makeblastdb, errors) → stderr.
+log_detail() { echo "$*" >&2; }
+
 # --- Reusable: remove sequences by ID list (pure bash/awk, no Python) ---
 # remove_seqs_bash <input_fasta> <omit_ids_file> <output_fasta> [--long]
 remove_seqs_bash() {
@@ -209,11 +213,11 @@ remove_seqs_bash() {
   local output_fasta="$3"
   local long_opt="${4:-}"
   if [[ ! -f "$input_fasta" ]]; then
-    echo "remove_seqs_bash: input not found: $input_fasta" >&2
+    log_detail "remove_seqs_bash: input not found: $input_fasta"
     return 1
   fi
   if [[ ! -f "$id_file" ]]; then
-    echo "remove_seqs_bash: id file not found: $id_file" >&2
+    log_detail "remove_seqs_bash: id file not found: $id_file"
     return 1
   fi
   # If no IDs are listed to omit, keep the FASTA unchanged.
@@ -326,7 +330,7 @@ run_phmmer() {
   # Pass 1: REMOVE as query, other as target.
   n_remove=$(grep -c ">" "$remove_file" || true)
   n_other=$(grep -c ">" "$other_file" || true)
-  $PHMMER_FILTER --cpu "$SLEDGE_CORES" --qsize 100 --qblock "$n_remove" --tblock "$n_other" --phigh 0 --plow 0 \
+  $PHMMER_FILTER --cpu "$PHMMER_CORES" --qsize 100 --qblock "$n_remove" --tblock "$n_other" --phigh 0 --plow 0 \
     -E "$E_VALUE" -Z "$Z_SIZE" --task_id "$TASK_ID" -o "${out_p}/phmmer_hits_pass1" \
     "$remove_file" "$other_file"
   # Pass 1: REMOVE is query → offending IDs are in column 1.
@@ -338,7 +342,7 @@ run_phmmer() {
   # Pass 2: other as query, pruned REMOVE as target (--all_hits on reverse direction).
   n_remove=$(grep -c ">" "$remove_pruned" || true)
   n_other=$(grep -c ">" "$other_file" || true)
-  $PHMMER_FILTER --all_hits --cpu "$SLEDGE_CORES" --qsize 100 --qblock "$n_other" --tblock "$n_remove" --phigh 0 --plow 0 \
+  $PHMMER_FILTER --all_hits --cpu "$PHMMER_CORES" --qsize 100 --qblock "$n_other" --tblock "$n_remove" --phigh 0 --plow 0 \
     -E "$E_VALUE" -Z "$Z_SIZE" --task_id "$TASK_ID" -o "${out_p}/phmmer_hits_pass2" \
     "$other_file" "$remove_pruned"
   if [[ "$REMOVE_TARGET" == "db" ]]; then
@@ -407,7 +411,7 @@ run_mmseqs() {
       $MMSEQS convertalis "${out_mm}/mm_remove_${iteration}_${TASK_ID}/db" "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" \
         "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1" "${out_mm}/mm_hits_pass1_${iteration}_${TASK_ID}.tsv" --format-mode 2 >&2
     else
-      echo "Error: mmseqs search failed (pass 1: REMOVE -> other)" >&2
+      log_detail "Error: mmseqs search failed (pass 1: REMOVE -> other)"
       exit 1
     fi
     rm_rf_retry "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1"*
@@ -430,7 +434,7 @@ run_mmseqs() {
       $MMSEQS convertalis "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" "${out_mm}/mm_remove_pruned_${iteration}_${TASK_ID}/db" \
         "${out_mm}/tmp_${iteration}_${TASK_ID}/pass2" "${out_mm}/mm_hits_pass2_${iteration}_${TASK_ID}.tsv" --format-mode 2 >&2
     else
-      echo "Error: mmseqs search failed (pass 2: other -> pruned REMOVE)" >&2
+      log_detail "Error: mmseqs search failed (pass 2: other -> pruned REMOVE)"
       exit 1
     fi
     rm_rf_retry "${out_mm}/tmp_${iteration}_${TASK_ID}"*
@@ -566,7 +570,8 @@ sw_run_pass() {
   local pass_tag="$5"
   local x_flag="${6:-}"
 
-  local n_query n_shards threads shard_dir k
+  local n_query n_shards threads shard_dir k sw_fail=0
+  local -a pids=()
   n_query=$(grep -c "^>" "$query_fasta" || true)
   n_shards=$(sw_effective_shards "$n_query" "$SW_SHARDS")
   if [[ "$n_shards" -le 1 ]]; then
@@ -587,9 +592,7 @@ sw_run_pass() {
     return
   fi
 
-  shard_dir="${out_sw_dir}/sw_shard_${pass_tag}_${TASK_ID}"
-  rm_rf_retry "$shard_dir"
-  mkdir -p "$shard_dir"
+  shard_dir="$(mktemp -d "${TMPDIR:-/tmp}/chisel_sw.XXXXXX")"
 
   awk -v d="$shard_dir" -v n="$n_shards" \
     '/^>/ { i++ } { print >> sprintf("%s/q_%d.fasta", d, (i-1)%n+1) }' "$query_fasta"
@@ -604,8 +607,12 @@ sw_run_pass() {
         -s BL62 -z 3 -f -11 -g -1 -X "$x_flag" \
         "${shard_dir}/q_${k}.fasta" "$target_fasta" > "${shard_dir}/out_${k}.tsv" &
     fi
+    pids+=($!)
   done
-  wait
+  for pid in "${pids[@]}"; do
+    wait "$pid" || sw_fail=1
+  done
+  [[ "$sw_fail" -eq 0 ]] || { log_detail "Error: ssearch36 shard failed (${pass_tag})"; exit 1; }
 
   : > "$out_tsv"
   for (( k=1; k<=n_shards; k++ )); do
@@ -678,6 +685,8 @@ run_sw() {
 }
 
 # --- Dispatch by --order (characters validated before config load) ---
+echo "chisel_filter: order=${ORDER} REMOVE_TARGET=${REMOVE_TARGET} fixed=${FIXED_FILE} db=${DB_FILE}"
+
 for (( i=0; i<${#ORDER}; i++ )); do
   case "${ORDER:i:1}" in
     p|P) run_phmmer ;;

@@ -56,7 +56,7 @@ case "${machine}" in
     )
     ;;
   *)
-    die "unsupported Linux machine type '${machine}'. Supported: x86_64, aarch64. Install tools manually or set SKIP_MMSEQS/SKIP_BLAST/SKIP_FASTA and point chisel_p3 at your own binaries."
+    die "unsupported Linux machine type '${machine}'. Supported: x86_64, aarch64. Install tools manually or set SKIP_MMSEQS/SKIP_BLAST/SKIP_FASTA and point chisel_filter at your own binaries."
     ;;
 esac
 
@@ -105,7 +105,7 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
 fi
 
 echo ""
-echo "Done. Point chisel_p3 config at:"
+echo "Done. Point chisel_filter config at:"
 echo "  MMSEQS=\"${EXTERNAL}/mmseqs/bin/mmseqs\""
 echo "  BLAST_DIR=\"${EXTERNAL}/ncbi-blast/bin\""
 echo "  FASTA_DIR=\"${EXTERNAL}/fasta36/bin\""

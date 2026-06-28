@@ -147,7 +147,7 @@ if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
 fi
 
 echo ""
-echo "Done. Point chisel_p3 config at:"
+echo "Done. Point chisel_filter config at:"
 echo "  MMSEQS=\"${EXTERNAL}/mmseqs/bin/mmseqs\""
 echo "  BLAST_DIR=\"${EXTERNAL}/ncbi-blast/bin\""
 echo "  FASTA_DIR=\"${EXTERNAL}/fasta36/bin\""

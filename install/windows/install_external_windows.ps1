@@ -29,4 +29,4 @@ wsl.exe bash -lc "bash '$wslInstaller' '$wslRepo'"
 
 Write-Host ""
 Write-Host "[install_external_windows] Done."
-Write-Host "Use the generated external_tools paths from inside WSL for chisel_p3 config."
+Write-Host "Use the generated external_tools paths from inside WSL for chisel_filter config."

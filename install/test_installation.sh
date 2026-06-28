@@ -20,19 +20,20 @@ mkdir -p "${INFO_DIR}" "${ARTIFACT_DIR}"
 
 TEST_FASTA="${ROOT_DIR}/test_db.fasta"
 
-SPLITTER_BIN="${CHISEL_DIR}/bin/chisel_p1"
+SPLITTER_BIN="${CHISEL_DIR}/bin/chisel_splitter"
+CHISEL_BUILD_BIN="${CHISEL_DIR}/bin/chisel_build"
 PHMMER_FILTER_BIN="${CHISEL_DIR}/bin/phmmer_filter"
-CHISEL_FILTER_BIN="${CHISEL_DIR}/bin/chisel_p3"
+CHISEL_FILTER_BIN="${CHISEL_DIR}/bin/chisel_filter"
 
 TOTAL=0
 PASSED=0
 FAILED=0
 SKIPPED=0
 
-# Paths for chisel_p3 integration (pmbs pipeline).
+# Paths for chisel_filter integration (pmbs pipeline).
 # Accept MMSEQS_BIN or MMSEQS (same for BLAST_DIR_*, FASTA_DIR_*). If unset and not on PATH, values are read from test_filter.config.
 # In test_filter.config, MMSEQS / BLAST_DIR / FASTA_DIR may be relative to CHISEL_DIR (e.g. external_tools/mmseqs/bin/mmseqs).
-# chisel_p3 runs with cwd under install/info/.../artifacts/...; relative paths would resolve there and fail. Expand to absolute paths before export.
+# chisel_filter runs with cwd under install/info/.../artifacts/...; relative paths would resolve there and fail. Expand to absolute paths before export.
 MMSEQS_BIN="${MMSEQS_BIN:-${MMSEQS:-}}"
 BLAST_DIR_BIN="${BLAST_DIR_BIN:-${BLAST_DIR:-}}"
 FASTA_DIR_BIN="${FASTA_DIR_BIN:-${FASTA_DIR:-}}"
@@ -102,7 +103,11 @@ check_prereqs() {
     ok=1
   fi
   if [[ ! -x "${SPLITTER_BIN}" ]]; then
-    echo "[FATAL] chisel_p1 not found/executable in bin/ or src/"
+    echo "[FATAL] chisel_splitter not found/executable in bin/"
+    ok=1
+  fi
+  if [[ ! -x "${CHISEL_BUILD_BIN}" ]]; then
+    echo "[FATAL] chisel_build not found/executable in bin/"
     ok=1
   fi
   if [[ ! -x "${PHMMER_FILTER_BIN}" ]]; then
@@ -110,7 +115,7 @@ check_prereqs() {
     ok=1
   fi
   if [[ ! -x "${CHISEL_FILTER_BIN}" ]]; then
-    echo "[FATAL] chisel_p3 not found/executable in bin/"
+    echo "[FATAL] chisel_filter not found/executable in bin/"
     ok=1
   fi
   if [[ ! -f "${ROOT_DIR}/test_filter.config" ]]; then
@@ -230,7 +235,7 @@ print_banner
 check_prereqs || exit 2
 
 # ---------------------------
-# chisel_p1 tests
+# chisel_build tests
 # ---------------------------
 # Shared splitter flags (no -Z / output dir here so invalid -Z and custom-path tests can vary).
 SPLIT_BASE_OPTS="--seed 42 --suppress"
@@ -320,7 +325,7 @@ run_test \
    test \$((TRAIN_N + TEST_N + VAL_N + DISCARD_N)) -eq \"\${PROC_N}\""
 
 # ---------------------------
-# chisel_p3 tests
+# chisel_filter tests
 # ---------------------------
 # Base without -Z / qblock / tblock so invalid -Z and undersized block tests set each once.
 COMMON_FILTER_BASE="--seed 42 --suppress"
@@ -383,62 +388,62 @@ run_test \
   "'${PHMMER_FILTER_BIN}' ${COMMON_FILTER_BASE} -Z 500000 --cpu 1 --qsize 1 --format 0 --qblock 100 --tblock 5 -o filt_small_tblock '${TEST_FASTA}' '${TEST_FASTA}'"
 
 # ---------------------------
-# chisel_p3 (pmbs pipeline) integration
+# chisel_filter (pmbs pipeline) integration
 # ---------------------------
 run_test \
-  "chisel_p3 pipeline pmbs install integration" \
+  "chisel_filter pipeline pmbs install integration" \
   0 \
   "write_filter_config_to ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/blast_check && test -d filter_test/sw_check"
 
 run_test \
-  "chisel_p3 pipeline spm order" \
+  "chisel_filter pipeline spm order" \
   0 \
   "write_filter_config_to ft.config && '${CHISEL_FILTER_BIN}' --order spm --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}' --out-suffix check" \
   "test -d filter_test/phmmer_check && test -d filter_test/mmseqs_check && test -d filter_test/sw_check"
 
 run_test \
-  "chisel_p3 missing required args" \
+  "chisel_filter missing required args" \
   1 \
   "'${CHISEL_FILTER_BIN}'"
 
 run_test \
-  "chisel_p3 missing config file" \
+  "chisel_filter missing config file" \
   1 \
   "'${CHISEL_FILTER_BIN}' --order pmbs --config ./does_not_exist_$$.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 empty config missing OUT_DIR" \
+  "chisel_filter empty config missing OUT_DIR" \
   1 \
   ": > empty.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./empty.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 unknown order character" \
+  "chisel_filter unknown order character" \
   1 \
   "'${CHISEL_FILTER_BIN}' --order pmxs --config ./irrelevant.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 invalid REMOVE_TARGET in config" \
+  "chisel_filter invalid REMOVE_TARGET in config" \
   1 \
   "write_filter_config_to ft.config && sed 's/^REMOVE_TARGET=.*/REMOVE_TARGET=\"bad\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 invalid CHISEL_CORES in config" \
+  "chisel_filter invalid CHISEL_CORES in config" \
   1 \
   "write_filter_config_to ft.config && sed 's/^CHISEL_CORES=.*/CHISEL_CORES=\"not_a_number\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 invalid CHISEL_FILTER path in config" \
+  "chisel_filter invalid CHISEL_FILTER path in config" \
   1 \
   "write_filter_config_to ft.config && sed 's|^PHMMER_FILTER=.*|PHMMER_FILTER=\"/nonexistent/phmmer_filter\"|' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 invalid MMSEQS path in config" \
+  "chisel_filter invalid MMSEQS path in config" \
   1 \
   "write_filter_config_to ft.config && sed 's|^MMSEQS=.*|MMSEQS=\"/nonexistent/mmseqs\"|' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 
 run_test \
-  "chisel_p3 invalid Z_SIZE in config" \
+  "chisel_filter invalid Z_SIZE in config" \
   1 \
   "write_filter_config_to ft.config && sed 's/^Z_SIZE=.*/Z_SIZE=\"0\"/' ft.config > ft2.config && mv ft2.config ft.config && '${CHISEL_FILTER_BIN}' --order pmbs --config ./ft.config --fixed-file '${ROOT_DIR}/test_fixed.fasta' --db-file '${TEST_FASTA}'"
 

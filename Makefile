@@ -29,7 +29,7 @@ LDFLAGS :=
 LDLIBS := -lpthread -lm
 
 CHISEL_SRCS := \
-	src/chisel_p1.c \
+	src/chisel_splitter.c \
 	src/phmmer_filter.c \
 	src/chisel_dev.c
 
@@ -65,7 +65,7 @@ EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
 .PHONY: all libs clean distclean install-external test-install
 
-all: $(BIN)/chisel_p1$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/chisel_p3 $(BIN)/chisel_p3
+all: $(BIN)/chisel_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/chisel_filter $(BIN)/chisel_build $(BIN)/chisel_dedup
 
 libs: $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 
@@ -80,9 +80,9 @@ $(BUILD)/libeasel_min.a: $(EASEL_OBJS)
 	$(RANLIB) $@
 
 ifeq ($(IS_MACOS),1)
-$(BIN)/chisel_p1$(EXE): $(BUILD)/src/chisel_p1.o $(BUILD)/src/chisel_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+$(BIN)/chisel_splitter$(EXE): $(BUILD)/src/chisel_splitter.o $(BUILD)/src/chisel_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(BIN) $(BUILD)
-	@t=$$(mktemp "$(BUILD)/chisel_p1.XXXXXX"); \
+	@t=$$(mktemp "$(BUILD)/chisel_splitter.XXXXXX"); \
 	$(CC) $(CFLAGS) $(LDFLAGS) -o "$$t" $^ $(LDLIBS) && \
 	chmod +x "$$t" && \
 	codesign --force --sign - "$$t" && \
@@ -96,13 +96,25 @@ $(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/chisel_dev
 	codesign --force --sign - "$$t" && \
 	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
 
-$(BIN)/chisel_p3: $(ROOT)/src/chisel_p3.sh
+$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
 	@mkdir -p $(BIN) $(BUILD)
-	@t=$$(mktemp "$(BUILD)/chisel_p3.XXXXXX"); \
+	@t=$$(mktemp "$(BUILD)/chisel_filter.XXXXXX"); \
+	cp $< "$$t" && chmod +x "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+
+$(BIN)/chisel_build: $(ROOT)/src/chisel_build.sh
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/chisel_build.XXXXXX"); \
+	cp $< "$$t" && chmod +x "$$t" && \
+	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
+
+$(BIN)/chisel_dedup: $(ROOT)/src/chisel_dedup.sh
+	@mkdir -p $(BIN) $(BUILD)
+	@t=$$(mktemp "$(BUILD)/chisel_dedup.XXXXXX"); \
 	cp $< "$$t" && chmod +x "$$t" && \
 	cp "$$t" $@ && chmod +x $@ && rm -f "$$t" || { st=$$?; rm -f "$$t"; exit $$st; }
 else
-$(BIN)/chisel_p1$(EXE): $(BUILD)/src/chisel_p1.o $(BUILD)/src/chisel_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
+$(BIN)/chisel_splitter$(EXE): $(BUILD)/src/chisel_splitter.o $(BUILD)/src/chisel_dev.o $(BUILD)/libhmmer_min.a $(BUILD)/libeasel_min.a
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
@@ -110,7 +122,17 @@ $(BIN)/phmmer_filter$(EXE): $(BUILD)/src/phmmer_filter.o $(BUILD)/src/chisel_dev
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $^ $(LDLIBS)
 
-$(BIN)/chisel_p3: $(ROOT)/src/chisel_p3.sh
+$(BIN)/chisel_filter: $(ROOT)/src/chisel_filter.sh
+	@mkdir -p $(dir $@)
+	cp $< $@
+	chmod +x $@
+
+$(BIN)/chisel_build: $(ROOT)/src/chisel_build.sh
+	@mkdir -p $(dir $@)
+	cp $< $@
+	chmod +x $@
+
+$(BIN)/chisel_dedup: $(ROOT)/src/chisel_dedup.sh
 	@mkdir -p $(dir $@)
 	cp $< $@
 	chmod +x $@
