@@ -5,8 +5,11 @@ BUILD := $(ROOT)/build
 BIN := $(ROOT)/bin
 
 -include $(ROOT)/build-config.mk
+# Build targets need configure; install/test script targets do not.
 ifndef IMPLDIR
+ifeq ($(filter install-scripts install-external test-install,$(MAKECMDGOALS)),)
 $(error Run ./configure before make. It writes build-config.mk for your CPU (SSE or NEON).)
+endif
 endif
 
 UNAME_S := $(shell uname -s 2>/dev/null || echo Unknown)
@@ -63,7 +66,19 @@ CHISEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(CHISEL_SRCS))
 HMMER_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(HMMER_SRCS))
 EASEL_OBJS := $(patsubst %.c,$(BUILD)/%.o,$(EASEL_SRCS))
 
-.PHONY: all libs clean distclean install-external test-install
+.PHONY: all libs clean distclean install-scripts install-external test-install
+
+# Git clones often drop executable bits; restore before running install/test scripts.
+INSTALL_SH := \
+	$(ROOT)/configure \
+	$(ROOT)/install/install_external.sh \
+	$(ROOT)/install/fasta36_install.sh \
+	$(ROOT)/install/test_installation.sh \
+	$(ROOT)/install/linux/install_external_linux.sh \
+	$(ROOT)/install/macos/install_external_macos.sh
+
+install-scripts:
+	chmod +x $(INSTALL_SH)
 
 all: $(BIN)/chisel_splitter$(EXE) $(BIN)/phmmer_filter$(EXE) $(BIN)/chisel_filter $(BIN)/chisel_build $(BIN)/chisel_dedup
 
@@ -155,14 +170,14 @@ $(BUILD)/%.o: $(ROOT)/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $(CPPFLAGS) $(INCLUDES) -c $< -o $@
 
-install-external:
+install-external: install-scripts
 	"$(ROOT)/install/install_external.sh" "$(ROOT)"
 
 ifeq ($(OS),Windows_NT)
-test-install:
+test-install: install-scripts
 	powershell.exe -ExecutionPolicy Bypass -File "$(ROOT)/install/windows/test_installation_windows.ps1" -ChiselDir "$(ROOT)"
 else
-test-install:
+test-install: install-scripts
 	bash "$(ROOT)/install/test_installation.sh" "$(ROOT)"
 endif
 
