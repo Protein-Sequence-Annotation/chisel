@@ -18,7 +18,8 @@
 set -euo pipefail
 
 die() { echo "[chisel_build] ERROR: $*" >&2; exit 1; }
-log() { echo "[chisel_build] $*" >&2; }
+# Progress and final stats → stdout (e.g. SLURM .out); errors only via die() → stderr.
+log() { echo "[chisel_build] $*"; }
 
 require_config() {
   local name="$1"

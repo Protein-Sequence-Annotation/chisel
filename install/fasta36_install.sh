@@ -7,12 +7,16 @@
 # Environment:
 #   FASTA36_MODE          custom (default) | legacy
 #   FASTA36_JOBS          parallel make -j (default: nproc / sysctl)
-#   FASTA36_CUSTOM_REPO   optional git URL for CHISEL fasta36 when published
+#   FASTA36_CUSTOM_REPO   git URL for Sledge fasta36 fork (overrides zip/bundled tree)
 #   FASTA36_CUSTOM_REF    branch/tag for FASTA36_CUSTOM_REPO (default: main)
+#   FASTA36_ZIP           path to source zip (default: <chisel>/install/fasta36-sledge.zip)
 #   FASTA36_LEGACY_REPO   upstream clone URL (default: wrpearson/fasta36)
 #   FASTA36_LEGACY_REF    upstream branch/tag (default: master)
 #
-# custom: bundled external_tools/fasta36, or FASTA36_CUSTOM_REPO when set.
+# custom (default), in order:
+#   1. FASTA36_CUSTOM_REPO — clone fork
+#   2. existing external_tools/fasta36/src — reuse extracted/bundled tree
+#   3. install/fasta36-sledge.zip — extract into external_tools/fasta36
 # legacy: clone upstream, apply install/patches/fasta36-gcc-prototypes.patch, build.
 
 set -euo pipefail
@@ -91,6 +95,19 @@ fasta36_install_legacy() {
   log "installed legacy ssearch36 -> ${bin_dir}/ssearch36"
 }
 
+fasta36_extract_zip() {
+  local zip_file="$1"
+  local dest="$2"
+
+  [[ -f "${zip_file}" ]] || return 1
+  need_cmd unzip
+  mkdir -p "${dest}"
+  log "extracting ${zip_file} -> ${dest}"
+  unzip -qo "${zip_file}" -d "${dest}"
+  [[ -d "${dest}/src" ]] || die "zip did not contain src/ after extract to ${dest}"
+  return 0
+}
+
 fasta36_install_custom() {
   local chisel_dir="$1"
   shift
@@ -100,6 +117,7 @@ fasta36_install_custom() {
   local bundled="${external}/fasta36"
   local src_root="${bundled}"
   local bin_dir="${external}/fasta36/bin"
+  local zip_file="${FASTA36_ZIP:-${chisel_dir}/install/fasta36-sledge.zip}"
   local custom_repo="${FASTA36_CUSTOM_REPO:-}"
   local custom_ref="${FASTA36_CUSTOM_REF:-main}"
   local clone_dir="${workdir}/fasta36-custom-clone"
@@ -115,9 +133,12 @@ fasta36_install_custom() {
       git clone --depth 1 "${custom_repo}" "${clone_dir}"
     fi
     mv "${clone_dir}" "${src_root}"
+  elif [[ -d "${bundled}/src" ]]; then
+    log "custom mode: using existing tree at ${bundled}"
+  elif fasta36_extract_zip "${zip_file}" "${bundled}"; then
+    log "custom mode: built from zip at ${bundled}"
   else
-    [[ -d "${bundled}/src" ]] || die "bundled fasta36 not found at ${bundled} (set FASTA36_CUSTOM_REPO to fetch remotely)"
-    log "custom mode: building bundled tree at ${bundled}"
+    die "no fasta36 source found (set FASTA36_CUSTOM_REPO, extract to ${bundled}, or ship ${zip_file})"
   fi
 
   fasta36_try_build "${src_root}" "${makefiles[@]}" \

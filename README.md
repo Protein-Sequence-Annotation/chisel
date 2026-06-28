@@ -122,13 +122,28 @@ You can still call the dispatcher directly if needed:
 ./install/install_external.sh /path/to/sledge
 ```
 
-The bundled [external_tools/fasta36](external_tools/fasta36) tree includes Sledge's query-parallel `ssearch36`; `make install-external` builds it by default (`FASTA36_MODE=custom`). For upstream FASTA36 with GCC compatibility patches, use legacy mode:
+The bundled Sledge FASTA36 source ships as **`install/fasta36-sledge.zip`** (query-parallel `ssearch36`). `make install-external` extracts it to `external_tools/fasta36` and builds by default (`FASTA36_MODE=custom`).
+
+When you publish a GitHub fork of the Sledge fasta36 tree, point the installer at it instead of the zip:
+
+```bash
+FASTA36_CUSTOM_REPO=https://github.com/YOURORG/fasta36-sledge.git make install-external
+```
+
+For upstream FASTA36 with GCC compatibility patches (no Sledge query-parallel changes), use legacy mode:
 
 ```bash
 FASTA36_MODE=legacy make install-external
 ```
 
-Set `SW_LEGACY=1` in your filter config when using the legacy binary (see `dev/filt_test/test_filter.config`). Optional overrides: `FASTA36_LEGACY_REPO`, `FASTA36_LEGACY_REF`, `FASTA36_CUSTOM_REPO`, `FASTA36_CUSTOM_REF` (for a remote Sledge fork when available).
+Set `SW_LEGACY=1` in `install/chisel.config` when using the legacy binary. Optional overrides: `FASTA36_LEGACY_REPO`, `FASTA36_LEGACY_REF`, `FASTA36_CUSTOM_REF`, `FASTA36_ZIP`.
+
+To repack the zip after editing a local tree under `external_tools/fasta36`:
+
+```bash
+(cd external_tools/fasta36 && zip -r ../install/fasta36-sledge.zip . \
+  -x 'bin/ssearch36' 'src/*.o' 'src/*.oo' 'src/*.a')
+```
 
 **macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`, native for Intel vs Apple Silicon) when available, and otherwise falls back to direct upstream tarball downloads (`mmseqs-osx-universal`, `ncbi-blast-<version>+-x64-macosx` by default). FASTA36 is built from source, choosing FASTA makefiles by **`uname -m`** (ARM Macs no longer prefer x86-only makefiles first). Optional overrides: `MMSEQS_TAG`, `MMSEQS_MACOS_ASSET`, `BLAST_VERSION`, `BLAST_PLATFORM`.
 
@@ -180,6 +195,8 @@ Each script reads only the variables it needs. Unused sections (splitter, dedup,
 | `OUT_DIR`, `REMOVE_TARGET` | `chisel_filter` (standalone); `chisel_build` overrides these per filter step |
 
 `install/test_filter.config` is a minimal config used only by `make test-install`.
+
+**Log output:** `chisel_build`, `chisel_dedup`, and `chisel_filter` print progress summaries (step labels, timing, sequence counts) on **stdout** and tool verbose output on **stderr**. With SLURM, point `#SBATCH --output` at stdout and `#SBATCH --error` at stderr to keep summaries in the `.out` file.
 
 ---
 

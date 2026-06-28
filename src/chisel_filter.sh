@@ -201,8 +201,8 @@ fi
 
 mkdir -p "$OUT_DIR"
 
-# Summary stats (timing, removal counts, completion) → stdout for callers that split .log / .err.
-# Tool verbose output (MMseqs, BLAST, makeblastdb, errors) → stderr.
+# Summary (timing, removal counts, completion) → stdout.
+# Tool verbose output (MMseqs, BLAST, makeblastdb, errors) → stderr via log_detail.
 log_detail() { echo "$*" >&2; }
 
 # --- Reusable: remove sequences by ID list (pure bash/awk, no Python) ---
