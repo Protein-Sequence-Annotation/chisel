@@ -119,7 +119,7 @@ check_prereqs() {
     ok=1
   fi
   if [[ ! -f "${ROOT_DIR}/test_filter.config" ]]; then
-    echo "[FATAL] Missing ${ROOT_DIR}/test_filter.config"
+    echo "[FATAL] Missing ${ROOT_DIR}/test_filter.config (run: make config)"
     ok=1
   fi
   if [[ ! -f "${ROOT_DIR}/test_db.fasta" ]]; then

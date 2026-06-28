@@ -164,26 +164,32 @@ powershell -ExecutionPolicy Bypass -File .\install\windows\test_installation_win
 
 ## Configuration
 
-All Chisel pipeline scripts share a single config file: **`install/chisel.config`**.
+Defaults live in **`install/chisel.config.in`** (and **`install/test_filter.config.in`** for tests). Generate runnable configs with absolute paths:
 
-Copy it, set `CHISEL_ROOT` if your paths are relative to the repo root, and pass it to any tool:
+```bash
+make config          # writes install/chisel.config and install/test_filter.config
+```
+
+Re-run after cloning or moving the repo. `make all` and `make install-external` also refresh configs when the `.in` templates change.
+
+Pass the generated file to any pipeline script:
 
 | Script | Example |
 |--------|---------|
-| `chisel_build` | `chisel_build --config my.config --input-db seqDB.fasta --output-dir out/` |
-| `chisel_dedup` | `chisel_dedup --config my.config --test-file test.fasta --val-file val.fasta --output-dir out/` |
-| `chisel_filter` | `chisel_filter --config my.config --order mbps --fixed-file test.fasta --db-file train.fasta` |
+| `chisel_build` | `chisel_build --config install/chisel.config --input-db seqDB.fasta --output-dir out/` |
+| `chisel_dedup` | `chisel_dedup --config install/chisel.config --file test.fasta [--output-dir out/]` |
+| `chisel_filter` | `chisel_filter --config install/chisel.config --order mbps --fixed-file test.fasta --db-file train.fasta` |
 
-Each script reads only the variables it needs. Unused sections (splitter, dedup, filter) are ignored.
+Each script reads only the variables it needs. Phase-specific tool tuning uses separate prefixes in one config:
 
-| Section | Used by |
-|---------|---------|
-| `SPLIT_*` | `chisel_build` (splitter step) |
-| `ORDER`, filter tools, `E_VALUE`, `Z_SIZE`, … | `chisel_build`, `chisel_filter` |
-| `DEDUP_*` | `chisel_dedup` |
-| `OUT_DIR`, `REMOVE_TARGET` | `chisel_filter` (standalone); `chisel_build` overrides these per filter step |
+| Prefix | Used by |
+|--------|---------|
+| `SPLIT_*`, `SPLITTER_EXTRA` | `chisel_build` (splitter) |
+| `BUILD_FILTER_*` | `chisel_build` filter steps (`CHISEL_PROFILE=build`) |
+| `FILTER_*` | standalone `chisel_filter` |
+| `DEDUP_PHMMER_*`, `DEDUP_PHMMER_EXTRA` | `chisel_dedup` |
 
-`install/test_filter.config` is a minimal config used only by `make test-install`.
+Named parameters (`*_PHMMER_PHIGH`, `*_PHMMER_PLOW`, `*_PHMMER_QSIZE`) cover pHMMER tuning for both filter passes; `*_PHMMER_EXTRA` appends optional flags. Pass 2 still adds `--all_hits` in the script.
 
 **Log output:** `chisel_build`, `chisel_dedup`, and `chisel_filter` print progress summaries (step labels, timing, sequence counts) on **stdout** and tool verbose output on **stderr**. With SLURM, point `#SBATCH --output` at stdout and `#SBATCH --error` at stderr to keep summaries in the `.out` file.
 

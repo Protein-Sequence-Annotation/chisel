@@ -115,6 +115,14 @@ done
 # Optional defaults from config if not set (KEEP_INTERMEDIATES is in config only)
 KEEP_INTERMEDIATES="${KEEP_INTERMEDIATES:-}"
 
+# BUILD_FILTER_* (chisel_build subprocess) vs FILTER_* (standalone chisel_filter).
+CHISEL_PROFILE="${CHISEL_PROFILE:-filter}"
+if [[ "$CHISEL_PROFILE" == "build" ]]; then
+  PROFILE_PREFIX="BUILD_FILTER"
+else
+  PROFILE_PREFIX="FILTER"
+fi
+
 # TASK_ID resolution:
 # - If config sets TASK_ID=SLURM, use $SLURM_ARRAY_TASK_ID when available (else 0).
 # - Otherwise, use the numeric TASK_ID from config, defaulting to 0 when unset.
@@ -220,6 +228,29 @@ mkdir -p "$OUT_DIR"
 # Summary (timing, removal counts, completion) → stdout.
 # Tool verbose output (MMseqs, BLAST, makeblastdb, errors) → stderr via log_detail.
 log_detail() { echo "$*" >&2; }
+
+# Read ${PROFILE_PREFIX}_${suffix} from config; echo default if unset/empty.
+profile_cfg() {
+  local suffix="$1"
+  local default="${2:-}"
+  local var="${PROFILE_PREFIX}_${suffix}"
+  if [[ -n "${!var+x}" && -n "${!var}" ]]; then
+    echo "${!var}"
+  else
+    echo "$default"
+  fi
+}
+
+# Append whitespace-separated extra flags from config onto a bash array.
+append_profile_extras() {
+  local -n _arr=$1
+  local suffix="$2"
+  local extras
+  extras="$(profile_cfg "$suffix" "")"
+  [[ -z "$extras" ]] && return 0
+  read -ra _extra <<< "$extras"
+  _arr+=("${_extra[@]}")
+}
 
 # --- Reusable: remove sequences by ID list (pure bash/awk, no Python) ---
 # remove_seqs_bash <input_fasta> <omit_ids_file> <output_fasta> [--long]
@@ -346,9 +377,22 @@ run_phmmer() {
   # Pass 1: REMOVE as query, other as target.
   n_remove=$(grep -c ">" "$remove_file" || true)
   n_other=$(grep -c ">" "$other_file" || true)
-  $PHMMER_FILTER --cpu "$PHMMER_CORES" --qsize 100 --qblock "$n_remove" --tblock "$n_other" --phigh 0 --plow 0 \
-    -E "$E_VALUE" -Z "$Z_SIZE" --task_id "$TASK_ID" -o "${out_p}/phmmer_hits_pass1" \
-    "$remove_file" "$other_file"
+  local -a phmmer_p1=()
+  phmmer_p1=(
+    --cpu "$PHMMER_CORES"
+    --qsize "$(profile_cfg PHMMER_QSIZE 100)"
+    --qblock "$n_remove"
+    --tblock "$n_other"
+    --phigh "$(profile_cfg PHMMER_PHIGH 0)"
+    --plow "$(profile_cfg PHMMER_PLOW 0)"
+    -E "$E_VALUE"
+    -Z "$Z_SIZE"
+    --task_id "$TASK_ID"
+    -o "${out_p}/phmmer_hits_pass1"
+  )
+  append_profile_extras phmmer_p1 PHMMER_EXTRA
+  phmmer_p1+=("$remove_file" "$other_file")
+  $PHMMER_FILTER "${phmmer_p1[@]}"
   # Pass 1: REMOVE is query → offending IDs are in column 1.
   append_omit_ids "${out_p}/phmmer_hits_pass1_${TASK_ID}.txt" 1 "$pass1_ids"
   pass1_hits=$(wc -l < "$pass1_ids")
@@ -358,9 +402,23 @@ run_phmmer() {
   # Pass 2: other as query, pruned REMOVE as target (--all_hits on reverse direction).
   n_remove=$(grep -c ">" "$remove_pruned" || true)
   n_other=$(grep -c ">" "$other_file" || true)
-  $PHMMER_FILTER --all_hits --cpu "$PHMMER_CORES" --qsize 100 --qblock "$n_other" --tblock "$n_remove" --phigh 0 --plow 0 \
-    -E "$E_VALUE" -Z "$Z_SIZE" --task_id "$TASK_ID" -o "${out_p}/phmmer_hits_pass2" \
-    "$other_file" "$remove_pruned"
+  local -a phmmer_p2=()
+  phmmer_p2=(
+    --all_hits
+    --cpu "$PHMMER_CORES"
+    --qsize "$(profile_cfg PHMMER_QSIZE 100)"
+    --qblock "$n_other"
+    --tblock "$n_remove"
+    --phigh "$(profile_cfg PHMMER_PHIGH 0)"
+    --plow "$(profile_cfg PHMMER_PLOW 0)"
+    -E "$E_VALUE"
+    -Z "$Z_SIZE"
+    --task_id "$TASK_ID"
+    -o "${out_p}/phmmer_hits_pass2"
+  )
+  append_profile_extras phmmer_p2 PHMMER_EXTRA
+  phmmer_p2+=("$other_file" "$remove_pruned")
+  $PHMMER_FILTER "${phmmer_p2[@]}"
   if [[ "$REMOVE_TARGET" == "db" ]]; then
     append_omit_ids "${out_p}/phmmer_hits_pass2_${TASK_ID}.txt" 2 "$pass2_ids"
     remove_seqs_bash "$remove_pruned" "$pass2_ids" "$phmmer_out"
@@ -409,6 +467,10 @@ run_mmseqs() {
     local remove_pruned="${out_mm}/mm_remove_pass1_${iteration}_${TASK_ID}.fasta"
     local n_remove n_other e_remove e_other
     local pass1_hits pass2_hits
+    local -a mm_search_extra=() mm_convert_extra=()
+
+    read -ra mm_search_extra <<< "$(profile_cfg MMSEQS_SEARCH_EXTRA "--alignment-mode 2 --cov-mode 0 -c 0")"
+    read -ra mm_convert_extra <<< "$(profile_cfg MMSEQS_CONVERTALIS_EXTRA "--format-mode 2")"
 
     n_remove=$(grep -c ">" "$mm_remove_file" || true)
     n_other=$(grep -c ">" "$mm_other_file" || true)
@@ -423,9 +485,10 @@ run_mmseqs() {
 
     if $MMSEQS search "${out_mm}/mm_remove_${iteration}_${TASK_ID}/db" "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" \
         "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1" "${out_mm}/tmp_pass1_${iteration}_${TASK_ID}" \
-        --alignment-mode 2 --cov-mode 0 -c 0 -e "$e_remove" --threads "$MMSEQS_CORES" --max-seqs "$MMSEQS_MAX_SEQS" >&2; then
+        "${mm_search_extra[@]}" -e "$e_remove" --threads "$MMSEQS_CORES" --max-seqs "$MMSEQS_MAX_SEQS" >&2; then
       $MMSEQS convertalis "${out_mm}/mm_remove_${iteration}_${TASK_ID}/db" "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" \
-        "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1" "${out_mm}/mm_hits_pass1_${iteration}_${TASK_ID}.tsv" --format-mode 2 >&2
+        "${out_mm}/tmp_${iteration}_${TASK_ID}/pass1" "${out_mm}/mm_hits_pass1_${iteration}_${TASK_ID}.tsv" \
+        "${mm_convert_extra[@]}" >&2
     else
       log_detail "Error: mmseqs search failed (pass 1: REMOVE -> other)"
       exit 1
@@ -446,9 +509,10 @@ run_mmseqs() {
 
     if $MMSEQS search "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" "${out_mm}/mm_remove_pruned_${iteration}_${TASK_ID}/db" \
         "${out_mm}/tmp_${iteration}_${TASK_ID}/pass2" "${out_mm}/tmp_pass2_${iteration}_${TASK_ID}" \
-        --alignment-mode 2 --cov-mode 0 -c 0 -e "$e_other" --threads "$MMSEQS_CORES" --max-seqs "$MMSEQS_MAX_SEQS" >&2; then
+        "${mm_search_extra[@]}" -e "$e_other" --threads "$MMSEQS_CORES" --max-seqs "$MMSEQS_MAX_SEQS" >&2; then
       $MMSEQS convertalis "${out_mm}/mm_other_${iteration}_${TASK_ID}/db" "${out_mm}/mm_remove_pruned_${iteration}_${TASK_ID}/db" \
-        "${out_mm}/tmp_${iteration}_${TASK_ID}/pass2" "${out_mm}/mm_hits_pass2_${iteration}_${TASK_ID}.tsv" --format-mode 2 >&2
+        "${out_mm}/tmp_${iteration}_${TASK_ID}/pass2" "${out_mm}/mm_hits_pass2_${iteration}_${TASK_ID}.tsv" \
+        "${mm_convert_extra[@]}" >&2
     else
       log_detail "Error: mmseqs search failed (pass 2: other -> pruned REMOVE)"
       exit 1
@@ -530,6 +594,9 @@ run_blast() {
   pass1_ids="${out_blast}/blast_pass1_hits_${TASK_ID}.txt"
   pass2_ids="${out_blast}/blast_pass2_hits_${TASK_ID}.txt"
   remove_pruned="${out_blast}/blast_remove_pass1_${TASK_ID}.fasta"
+  local -a blast_extra=()
+
+  read -ra blast_extra <<< "$(profile_cfg BLASTP_EXTRA "")"
 
   mkdir -p "${out_blast}/tmp_${TASK_ID}" "${out_blast}/b_other_${TASK_ID}" "${out_blast}/b_remove_pruned_${TASK_ID}"
 
@@ -537,7 +604,9 @@ run_blast() {
   $BLAST_DIR/makeblastdb -in "$other_file" -dbtype prot -out "${out_blast}/b_other_${TASK_ID}/db" >&2
   $BLAST_DIR/blastp -query "$remove_file" -db "${out_blast}/b_other_${TASK_ID}/db" \
     -out "${out_blast}/blast_hits_pass1_${TASK_ID}.tsv" \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" -evalue "$E_VALUE" -dbsize "$BLAST_DBSIZE" -max_target_seqs "$BLAST_MAX_TARGET_SEQS" -num_threads "$BLAST_CORES" >&2
+    -outfmt "6 qseqid sseqid pident length evalue bitscore" -evalue "$E_VALUE" -dbsize "$BLAST_DBSIZE" \
+    -max_target_seqs "$BLAST_MAX_TARGET_SEQS" -num_threads "$BLAST_CORES" \
+    "${blast_extra[@]}" >&2
   awk '{print $1}' "${out_blast}/blast_hits_pass1_${TASK_ID}.tsv" | sort -u > "$pass1_ids"
   pass1_hits=$(wc -l < "$pass1_ids")
   remove_seqs_bash "$remove_file" "$pass1_ids" "$remove_pruned"
@@ -547,7 +616,9 @@ run_blast() {
   $BLAST_DIR/makeblastdb -in "$remove_pruned" -dbtype prot -out "${out_blast}/b_remove_pruned_${TASK_ID}/db" >&2
   $BLAST_DIR/blastp -query "$other_file" -db "${out_blast}/b_remove_pruned_${TASK_ID}/db" \
     -out "${out_blast}/blast_hits_pass2_${TASK_ID}.tsv" \
-    -outfmt "6 qseqid sseqid pident length evalue bitscore" -evalue "$E_VALUE" -dbsize "$BLAST_DBSIZE" -max_target_seqs "$BLAST_MAX_TARGET_SEQS" -num_threads "$BLAST_CORES" >&2
+    -outfmt "6 qseqid sseqid pident length evalue bitscore" -evalue "$E_VALUE" -dbsize "$BLAST_DBSIZE" \
+    -max_target_seqs "$BLAST_MAX_TARGET_SEQS" -num_threads "$BLAST_CORES" \
+    "${blast_extra[@]}" >&2
   awk '{print $2}' "${out_blast}/blast_hits_pass2_${TASK_ID}.tsv" | sort -u > "$pass2_ids"
   pass2_hits=$(wc -l < "$pass2_ids")
   local total_removed=$((pass1_hits + pass2_hits))
@@ -596,9 +667,10 @@ sw_run_pass() {
   local x_flag="${6:-}"
 
   local n_query n_shards threads shard_dir k sw_fail=0
-  local -a pids=()
+  local -a pids=() sw_extra=()
   n_query=$(grep -c "^>" "$query_fasta" || true)
   n_shards=$(sw_effective_shards "$n_query" "$SW_SHARDS")
+  read -ra sw_extra <<< "$(profile_cfg SW_EXTRA "-s BL62 -z 3 -f -11 -g -1")"
   if [[ "$n_shards" -le 1 ]]; then
     threads="$SW_CORES"
   else
@@ -611,7 +683,7 @@ sw_run_pass() {
         "$query_fasta" "$target_fasta" > "$out_tsv"
     else
       $FASTA_DIR/ssearch36 -m 8 -q -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        -s BL62 -z 3 -f -11 -g -1 -X "$x_flag" \
+        "${sw_extra[@]}" -X "$x_flag" \
         "$query_fasta" "$target_fasta" > "$out_tsv"
     fi
     return
@@ -629,7 +701,7 @@ sw_run_pass() {
         "${shard_dir}/q_${k}.fasta" "$target_fasta" > "${shard_dir}/out_${k}.tsv" &
     else
       $FASTA_DIR/ssearch36 -m 8 -q -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        -s BL62 -z 3 -f -11 -g -1 -X "$x_flag" \
+        "${sw_extra[@]}" -X "$x_flag" \
         "${shard_dir}/q_${k}.fasta" "$target_fasta" > "${shard_dir}/out_${k}.tsv" &
     fi
     pids+=($!)
@@ -674,7 +746,7 @@ run_sw() {
       "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1"
   else
     sw_run_pass "$out_sw" "$remove_file" "$other_file" \
-      "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1" "early_stop"
+      "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1" "$(profile_cfg SW_PASS1_X early_stop)"
   fi
   awk '{print $1}' "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" | sort -u > "$pass1_ids"
   pass1_hits=$(wc -l < "$pass1_ids")
@@ -686,7 +758,7 @@ run_sw() {
       "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2"
   else
     sw_run_pass "$out_sw" "$other_file" "$remove_pruned" \
-      "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2" "all_hits"
+      "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2" "$(profile_cfg SW_PASS2_X all_hits)"
   fi
   awk '{print $2}' "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" | sort -u > "$pass2_ids"
   pass2_hits=$(wc -l < "$pass2_ids")

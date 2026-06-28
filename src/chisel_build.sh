@@ -124,6 +124,10 @@ split_args=(
   -o stats
 )
 [[ "$SPLIT_SUPPRESS" == "1" ]] && split_args+=(--suppress)
+if [[ -n "${SPLITTER_EXTRA:-}" ]]; then
+  read -ra _split_extra <<< "$SPLITTER_EXTRA"
+  split_args+=("${_split_extra[@]}")
+fi
 
 "$CHISEL_SPLITTER" "${split_args[@]}" "$INPUT_DB"
 
@@ -144,8 +148,10 @@ cp -f "$DISCARD_FASTA" "$DISCARD_ACCUM"
 write_filter_config() {
   local out_cfg="$1"
   local filter_out_dir="$2"
-  awk -v od="$filter_out_dir" \
-      -v pf="$PHMMER_FILTER" -v mm="$MMSEQS" -v bd="$BLAST_DIR" -v fd="$FASTA_DIR" '
+  {
+    echo 'CHISEL_PROFILE="build"'
+    awk -v od="$filter_out_dir" \
+        -v pf="$PHMMER_FILTER" -v mm="$MMSEQS" -v bd="$BLAST_DIR" -v fd="$FASTA_DIR" '
     /^SPLIT_/ { next }
     /^DEDUP_/ { next }
     /^ORDER=/ { next }
@@ -153,6 +159,7 @@ write_filter_config() {
     /^CHISEL_SPLITTER=/ { next }
     /^CHISEL_FILTER=/ { next }
     /^CHISEL_P3=/ { next }
+    /^CHISEL_PROFILE=/ { next }
     /^OUT_DIR=/ { print "OUT_DIR=\"" od "\""; next }
     /^REMOVE_TARGET=/ { print "REMOVE_TARGET=\"fixed\""; next }
     /^PHMMER_FILTER=/ { print "PHMMER_FILTER=\"" pf "\""; next }
@@ -160,7 +167,8 @@ write_filter_config() {
     /^BLAST_DIR=/ { print "BLAST_DIR=\"" bd "\""; next }
     /^FASTA_DIR=/ { print "FASTA_DIR=\"" fd "\""; next }
     { print }
-  ' "$CONFIG_FILE" > "$out_cfg"
+  ' "$CONFIG_FILE"
+  } > "$out_cfg"
 }
 
 # Append sequences present in before_fasta but absent from after_fasta to discard (header short-id match).
