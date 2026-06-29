@@ -1,23 +1,13 @@
 #!/usr/bin/env bash
-# Build ssearch36 and install to <chisel_dir>/external_tools/fasta36/bin.
+# Clone upstream FASTA36, apply GCC patch, build ssearch36, install to bin/.
 #
 # Usage:
 #   install/fasta36_install.sh <chisel_dir> <makefile-relative-to-src>...
 #
 # Environment:
-#   FASTA36_MODE          custom (default) | legacy
-#   FASTA36_JOBS          parallel make -j (default: nproc / sysctl)
-#   FASTA36_CUSTOM_REPO   git URL for Sledge fasta36 fork (overrides zip/bundled tree)
-#   FASTA36_CUSTOM_REF    branch/tag for FASTA36_CUSTOM_REPO (default: main)
-#   FASTA36_ZIP           path to source zip (default: <chisel>/install/fasta36-sledge.zip)
-#   FASTA36_LEGACY_REPO   upstream clone URL (default: wrpearson/fasta36)
-#   FASTA36_LEGACY_REF    upstream branch/tag (default: master)
-#
-# custom (default), in order:
-#   1. FASTA36_CUSTOM_REPO — clone fork
-#   2. existing external_tools/fasta36/src — reuse extracted/bundled tree
-#   3. install/fasta36-sledge.zip — extract into external_tools/fasta36
-# legacy: clone upstream, apply install/patches/fasta36-gcc-prototypes.patch, build.
+#   FASTA36_JOBS   parallel make -j (default: nproc / sysctl)
+#   FASTA36_REPO   git clone URL (default: https://github.com/wrpearson/fasta36.git)
+#   FASTA36_REF    branch/tag to clone (default: master)
 
 set -euo pipefail
 
@@ -60,96 +50,21 @@ fasta36_try_build() {
   return 0
 }
 
-fasta36_install_legacy() {
-  local chisel_dir="$1"
-  shift
-  local -a makefiles=("$@")
-  local external="${chisel_dir}/external_tools"
-  local workdir="${external}/.downloads"
-  local patch="${chisel_dir}/install/patches/fasta36-gcc-prototypes.patch"
-  local legacy_repo="${FASTA36_LEGACY_REPO:-https://github.com/wrpearson/fasta36.git}"
-  local legacy_ref="${FASTA36_LEGACY_REF:-master}"
-  local src_root="${external}/fasta36-src"
-  local bin_dir="${external}/fasta36/bin"
-  local clone_dir="${workdir}/fasta36-legacy-clone"
+fasta36_apply_patch() {
+  local src_root="$1"
+  local patch="$2"
 
-  need_cmd git
+  [[ -f "${patch}" ]] || return 0
   need_cmd patch
-  [[ -f "${patch}" ]] || die "missing patch file: ${patch}"
-
-  mkdir -p "${workdir}" "${bin_dir}"
-  rm -rf "${clone_dir}" "${src_root}"
-  log "legacy mode: cloning ${legacy_repo} (${legacy_ref})"
-  if ! git clone --depth 1 --branch "${legacy_ref}" "${legacy_repo}" "${clone_dir}" 2>/dev/null; then
-    git clone --depth 1 "${legacy_repo}" "${clone_dir}"
+  if patch -d "${src_root}" -p1 --reverse --dry-run --force --silent <"${patch}" 2>/dev/null; then
+    log "patch already applied (${patch})"
+    return 0
   fi
-  mv "${clone_dir}" "${src_root}"
-
-  log "applying ${patch}"
-  patch -d "${src_root}" -p1 --forward <"${patch}" || die "fasta36 GCC prototype patch failed"
-
-  fasta36_try_build "${src_root}" "${makefiles[@]}" \
-    || die "legacy fasta36 build failed"
-  cp -f "${src_root}/bin/ssearch36" "${bin_dir}/ssearch36"
-  chmod +x "${bin_dir}/ssearch36"
-  log "installed legacy ssearch36 -> ${bin_dir}/ssearch36"
-}
-
-fasta36_extract_zip() {
-  local zip_file="$1"
-  local dest="$2"
-
-  [[ -f "${zip_file}" ]] || return 1
-  need_cmd unzip
-  mkdir -p "${dest}"
-  log "extracting ${zip_file} -> ${dest}"
-  unzip -qo "${zip_file}" -d "${dest}"
-  [[ -d "${dest}/src" ]] || die "zip did not contain src/ after extract to ${dest}"
-  return 0
-}
-
-fasta36_install_custom() {
-  local chisel_dir="$1"
-  shift
-  local -a makefiles=("$@")
-  local external="${chisel_dir}/external_tools"
-  local workdir="${external}/.downloads"
-  local bundled="${external}/fasta36"
-  local src_root="${bundled}"
-  local bin_dir="${external}/fasta36/bin"
-  local zip_file="${FASTA36_ZIP:-${chisel_dir}/install/fasta36-sledge.zip}"
-  local custom_repo="${FASTA36_CUSTOM_REPO:-}"
-  local custom_ref="${FASTA36_CUSTOM_REF:-main}"
-  local clone_dir="${workdir}/fasta36-custom-clone"
-
-  mkdir -p "${bin_dir}"
-  if [[ -n "${custom_repo}" ]]; then
-    need_cmd git
-    src_root="${external}/fasta36-custom-src"
-    mkdir -p "${workdir}"
-    rm -rf "${clone_dir}" "${src_root}"
-    log "custom mode: cloning ${custom_repo} (${custom_ref})"
-    if ! git clone --depth 1 --branch "${custom_ref}" "${custom_repo}" "${clone_dir}" 2>/dev/null; then
-      git clone --depth 1 "${custom_repo}" "${clone_dir}"
-    fi
-    mv "${clone_dir}" "${src_root}"
-  elif [[ -d "${bundled}/src" ]]; then
-    log "custom mode: using existing tree at ${bundled}"
-  elif fasta36_extract_zip "${zip_file}" "${bundled}"; then
-    log "custom mode: built from zip at ${bundled}"
+  if patch -d "${src_root}" -p1 --forward --dry-run --force --silent <"${patch}" 2>/dev/null; then
+    log "applying ${patch}"
+    patch -d "${src_root}" -p1 --forward --force <"${patch}" || die "fasta36 GCC prototype patch failed"
   else
-    die "no fasta36 source found (set FASTA36_CUSTOM_REPO, extract to ${bundled}, or ship ${zip_file})"
-  fi
-
-  fasta36_try_build "${src_root}" "${makefiles[@]}" \
-    || die "custom fasta36 build failed"
-
-  if [[ "${src_root}" != "${bundled}" ]]; then
-    cp -f "${src_root}/bin/ssearch36" "${bin_dir}/ssearch36"
-    chmod +x "${bin_dir}/ssearch36"
-    log "installed custom ssearch36 -> ${bin_dir}/ssearch36"
-  else
-    log "built ssearch36 -> ${bundled}/bin/ssearch36"
+    die "patch does not apply cleanly to ${src_root} (${patch})"
   fi
 }
 
@@ -157,23 +72,43 @@ fasta36_install() {
   local chisel_dir="$1"
   shift
   local -a makefiles=("$@")
-  local mode="${FASTA36_MODE:-custom}"
+  local external="${chisel_dir}/external_tools"
+  local workdir="${external}/.downloads"
+  local src_root="${external}/fasta36-src"
+  local bin_dir="${external}/fasta36/bin"
+  local patch="${chisel_dir}/install/patches/fasta36-gcc-prototypes.patch"
+  local repo="${FASTA36_REPO:-https://github.com/wrpearson/fasta36.git}"
+  local ref="${FASTA36_REF:-master}"
+  local clone_dir="${workdir}/fasta36-clone"
 
   [[ -d "${chisel_dir}" ]] || die "not a directory: ${chisel_dir}"
   [[ ${#makefiles[@]} -gt 0 ]] || die "supply at least one FASTA makefile path (relative to src/)"
 
   need_cmd make
-  case "${mode}" in
-    custom)
-      fasta36_install_custom "${chisel_dir}" "${makefiles[@]}"
-      ;;
-    legacy)
-      fasta36_install_legacy "${chisel_dir}" "${makefiles[@]}"
-      ;;
-    *)
-      die "FASTA36_MODE must be 'custom' or 'legacy' (got: ${mode})"
-      ;;
-  esac
+  need_cmd git
+  need_cmd patch
+
+  # Drop any bundled source trees; only bin/ + fasta36-src from clone are used.
+  rm -rf "${external}/fasta36_experimental"
+  if [[ -d "${external}/fasta36" ]]; then
+    find "${external}/fasta36" -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
+  fi
+  rm -rf "${src_root}" "${clone_dir}"
+  mkdir -p "${workdir}" "${bin_dir}"
+
+  log "cloning ${repo} (${ref})"
+  if ! git clone --depth 1 --branch "${ref}" "${repo}" "${clone_dir}" 2>/dev/null; then
+    git clone --depth 1 "${repo}" "${clone_dir}"
+  fi
+  mv "${clone_dir}" "${src_root}"
+
+  fasta36_apply_patch "${src_root}" "${patch}"
+  fasta36_try_build "${src_root}" "${makefiles[@]}" \
+    || die "fasta36 build failed in ${src_root}"
+
+  cp -f "${src_root}/bin/ssearch36" "${bin_dir}/ssearch36"
+  chmod +x "${bin_dir}/ssearch36"
+  log "installed ssearch36 -> ${bin_dir}/ssearch36"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then

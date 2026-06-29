@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install MMseqs2, NCBI BLAST+, and FASTA36 into <chisel_dir>/external_tools (Linux).
 # Detects CPU (x86_64 vs aarch64) and picks matching upstream binaries / FASTA makefiles.
-# FASTA36: FASTA36_MODE=custom (default) or legacy — see install/fasta36_install.sh.
+# FASTA36: clones upstream wrpearson/fasta36 — see install/fasta36_install.sh.
 
 set -euo pipefail
 
@@ -97,8 +97,6 @@ fi
 
 if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   INSTALL_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  FASTA36_MODE="${FASTA36_MODE:-custom}"
-  echo "[install_external_linux] FASTA36 mode: ${FASTA36_MODE}"
   # shellcheck source=../fasta36_install.sh
   source "${INSTALL_DIR}/fasta36_install.sh"
   fasta36_install "${CHISEL_DIR}" "${FASTA_MAKEFILES[@]}"

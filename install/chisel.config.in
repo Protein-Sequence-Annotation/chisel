@@ -45,10 +45,6 @@ MMSEQS="@CHISEL_ROOT@/external_tools/mmseqs/bin/mmseqs"
 BLAST_DIR="@CHISEL_ROOT@/external_tools/ncbi-blast/bin"
 FASTA_DIR="@CHISEL_ROOT@/external_tools/fasta36/bin"
 
-# --- Smith–Waterman: 0 = Sledge fasta36; 1 = legacy upstream ---
-SW_LEGACY="0"
-SW_SHARDS="4"
-
 # --- Long ID parsing (MMseqs): 1 = use 2nd pipe field in FASTA headers ---
 USE_LONG_ID="1"
 
@@ -76,9 +72,7 @@ BUILD_FILTER_MMSEQS_CONVERTALIS_EXTRA="--format-mode 2"
 BUILD_FILTER_BLASTP_EXTRA=""
 
 # --- SSEARCH36 FILTER ARGS ---
-BUILD_FILTER_SW_EXTRA="-s BL62 -z 3 -f -11 -g -1"
-BUILD_FILTER_SW_PASS1_X="early_stop"
-BUILD_FILTER_SW_PASS2_X="all_hits"
+BUILD_FILTER_SW_EXTRA=""
 
 # --- chisel_filter (standalone; CHISEL_PROFILE=filter) ---
 # --- PHMMER FILTER ARGS ---
@@ -95,13 +89,11 @@ FILTER_MMSEQS_CONVERTALIS_EXTRA="--format-mode 2"
 FILTER_BLASTP_EXTRA=""
 
 # --- SSEARCH36 FILTER ARGS ---
-FILTER_SW_EXTRA="-s BL62 -z 3 -f -11 -g -1"
-FILTER_SW_PASS1_X="early_stop"
-FILTER_SW_PASS2_X="all_hits"
+FILTER_SW_EXTRA=""
 
 # --- chisel_dedup: phmmer_filter self-deduplication ---
-DEDUP_PHMMER_PHIGH="0.5"
-DEDUP_PHMMER_PLOW="0"
-DEDUP_PHMMER_QSIZE="100"
-DEDUP_PHMMER_EXTRA=""
-DEDUP_PHMMER_SUPPRESS="0"
+DEDUP_PHIGH="0.5"
+DEDUP_PLOW="0"
+DEDUP_QSIZE="100"
+DEDUP_EXTRA=""
+DEDUP_SUPPRESS="0"

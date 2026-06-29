@@ -77,7 +77,7 @@ CHISEL_ROOT="${CHISEL_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 PHMMER_FILTER="${PHMMER_FILTER:-${CHISEL_ROOT}/bin/phmmer_filter}"
 
 for var in TASK_ID E_VALUE Z_SIZE PHMMER_CORES PHMMER_FILTER \
-  DEDUP_PHMMER_PHIGH DEDUP_PHMMER_PLOW DEDUP_PHMMER_QSIZE; do
+  DEDUP_PHIGH DEDUP_PLOW DEDUP_QSIZE; do
   require_config "$var"
 done
 
@@ -105,7 +105,7 @@ PHMMER_FILTER="$(abs_from_chisel_root "${PHMMER_FILTER}")"
 KEEP_WORK=""
 [[ -n "${KEEP_INTERMEDIATES:-}" && "${KEEP_INTERMEDIATES}" != "0" ]] && KEEP_WORK="1"
 
-DEDUP_PHMMER_SUPPRESS="${DEDUP_PHMMER_SUPPRESS:-0}"
+DEDUP_SUPPRESS="${DEDUP_SUPPRESS:-0}"
 
 WORKDIR="${OUTPUT_DIR}/.chisel_dedup_${INPUT_STEM}.work"
 rm -rf "$WORKDIR"
@@ -170,26 +170,26 @@ dedup_fasta() {
     echo "chisel_dedup: $(basename "$input_fasta")"
     echo "  input:  ${input_fasta} (${n_in} seqs)"
     echo "  output: ${output_fasta}"
-    echo "  phigh/plow: ${DEDUP_PHMMER_PHIGH} / ${DEDUP_PHMMER_PLOW}"
-    echo "  E=${E_VALUE} Z=${Z_SIZE} cpu=${PHMMER_CORES} qsize=${DEDUP_PHMMER_QSIZE}"
+    echo "  phigh/plow: ${DEDUP_PHIGH} / ${DEDUP_PLOW}"
+    echo "  E=${E_VALUE} Z=${Z_SIZE} cpu=${PHMMER_CORES} qsize=${DEDUP_QSIZE}"
   } >"$summary_log"
 
   phmmer_args=(
     --cpu "$PHMMER_CORES"
-    --qsize "$DEDUP_PHMMER_QSIZE"
+    --qsize "$DEDUP_QSIZE"
     --qblock "$n_in"
     --tblock "$n_in"
-    --phigh "$DEDUP_PHMMER_PHIGH"
-    --plow "$DEDUP_PHMMER_PLOW"
+    --phigh "$DEDUP_PHIGH"
+    --plow "$DEDUP_PLOW"
     -E "$E_VALUE"
     -Z "$Z_SIZE"
     --task_id "$TASK_ID"
     --no_self
     -o "$out_prefix"
   )
-  [[ -n "${DEDUP_PHMMER_EXTRA:-}" ]] && read -ra dedup_extra <<< "$DEDUP_PHMMER_EXTRA" && phmmer_args+=("${dedup_extra[@]}")
+  [[ -n "${DEDUP_EXTRA:-}" ]] && read -ra dedup_extra <<< "$DEDUP_EXTRA" && phmmer_args+=("${dedup_extra[@]}")
   phmmer_args+=("$input_fasta" "$input_fasta")
-  [[ "$DEDUP_PHMMER_SUPPRESS" == "1" ]] && phmmer_args=(--suppress "${phmmer_args[@]}")
+  [[ "$DEDUP_SUPPRESS" == "1" ]] && phmmer_args=(--suppress "${phmmer_args[@]}")
 
   if ! "$PHMMER_FILTER" "${phmmer_args[@]}" >>"$summary_log" 2>"$detail_log"; then
     cat "$summary_log" "$detail_log" >&2

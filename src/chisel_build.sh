@@ -64,7 +64,6 @@ for var in ORDER TASK_ID \
   E_VALUE Z_SIZE \
   PHMMER_CORES MMSEQS_CORES BLAST_CORES SW_CORES \
   PHMMER_FILTER MMSEQS BLAST_DIR FASTA_DIR \
-  SW_LEGACY SW_SHARDS \
   BLAST_DBSIZE BLAST_MAX_TARGET_SEQS MMSEQS_MAX_SEQS; do
   require_config "$var"
 done
@@ -221,6 +220,7 @@ run_filter_fixed() {
   local fixed_file="$2"
   local db_file="$3"
   local out_suffix="$4"
+  local -n _out_path="$5"
   local cfg_dir="${WORKDIR}/config_${out_suffix}"
   local filter_out="${WORKDIR}/filter_${out_suffix}"
   local cfg="${cfg_dir}/filter.config"
@@ -244,19 +244,19 @@ run_filter_fixed() {
     || die "could not locate pruned fixed-file output for ${step_label} (log: ${summary_log})"
 
   append_filter_rejects_to_discard "$fixed_file" "$fixed_out" "$DISCARD_ACCUM"
-  printf '%s\n' "$fixed_out"
+  _out_path="$fixed_out"
 }
 
 # --- Step 2: test vs val — remove from test only ---
 # chisel_filter two-pass pruning searches both directions (test→val, then val→pruned test)
 # but with REMOVE_TARGET=fixed all removals are applied to the fixed file (test).
-TEST_PRUNED="$(run_filter_fixed "Step 2/4: prune test vs val" "$TEST_FASTA" "$VAL_FASTA" "test_vs_val")"
+run_filter_fixed "Step 2/4: prune test vs val" "$TEST_FASTA" "$VAL_FASTA" "test_vs_val" TEST_PRUNED
 
 # --- Step 3: train vs pruned test — remove from train ---
-TRAIN_PRUNED="$(run_filter_fixed "Step 3/4: prune train vs test" "$TRAIN_FASTA" "$TEST_PRUNED" "train_vs_test")"
+run_filter_fixed "Step 3/4: prune train vs test" "$TRAIN_FASTA" "$TEST_PRUNED" "train_vs_test" TRAIN_PRUNED
 
 # --- Step 4: train vs val — remove from train ---
-TRAIN_FINAL="$(run_filter_fixed "Step 4/4: prune train vs val" "$TRAIN_PRUNED" "$VAL_FASTA" "train_vs_val")"
+run_filter_fixed "Step 4/4: prune train vs val" "$TRAIN_PRUNED" "$VAL_FASTA" "train_vs_val" TRAIN_FINAL
 
 FINAL_TEST="${OUTPUT_DIR}/test.fasta"
 FINAL_VAL="${OUTPUT_DIR}/val.fasta"

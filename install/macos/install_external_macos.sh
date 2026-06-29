@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install MMseqs2, BLAST+, and FASTA36 for macOS.
 # Uses Homebrew for MMseqs2/BLAST+ when available; otherwise falls back to
-# upstream tarball downloads. FASTA36: FASTA36_MODE=custom (default) or legacy.
+# upstream tarball downloads. FASTA36: clone upstream — see install/fasta36_install.sh.
 
 set -euo pipefail
 
@@ -126,8 +126,6 @@ fi
 
 if [[ "${SKIP_FASTA:-0}" != "1" ]]; then
   need_cmd codesign
-  FASTA36_MODE="${FASTA36_MODE:-custom}"
-  echo "[install_external_macos] FASTA36 mode: ${FASTA36_MODE}"
   # shellcheck source=../fasta36_install.sh
   source "${INSTALL_MACOS_DIR}/../fasta36_install.sh"
   fasta36_install "${CHISEL_DIR}" "${FASTA_MAKEFILES[@]}"

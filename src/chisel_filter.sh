@@ -145,8 +145,6 @@ PHMMER_CORES="${PHMMER_CORES:-96}"
 MMSEQS_CORES="${MMSEQS_CORES:-96}"
 BLAST_CORES="${BLAST_CORES:-96}"
 SW_CORES="${SW_CORES:-96}"
-SW_LEGACY="${SW_LEGACY:-0}"
-SW_SHARDS="${SW_SHARDS:-4}"
 BLAST_DBSIZE="${BLAST_DBSIZE:-32596740121}"
 BLAST_MAX_TARGET_SEQS="${BLAST_MAX_TARGET_SEQS:-12000000}"
 MMSEQS_MAX_SEQS="${MMSEQS_MAX_SEQS:-12000000}"
@@ -170,19 +168,6 @@ for _cname in PHMMER_CORES MMSEQS_CORES BLAST_CORES SW_CORES; do
     exit 1
   fi
 done
-
-if [[ "$SW_LEGACY" != "0" && "$SW_LEGACY" != "1" ]]; then
-  echo "SW_LEGACY must be 0 or 1 (got: ${SW_LEGACY:-})" >&2
-  exit 1
-fi
-if ! is_positive_uint "$SW_SHARDS"; then
-  echo "SW_SHARDS must be a positive integer (got: ${SW_SHARDS:-})" >&2
-  exit 1
-fi
-if [[ "$SW_SHARDS" -gt 1 && $((SW_CORES % SW_SHARDS)) -ne 0 ]]; then
-  echo "SW_CORES ($SW_CORES) must be divisible by SW_SHARDS ($SW_SHARDS)" >&2
-  exit 1
-fi
 
 # Only require binaries for tools listed in --order (e.g. pms skips BLAST if b is absent).
 NEED_PHMMER=0
@@ -645,79 +630,21 @@ run_blast() {
 }
 
 # --- SW (Smith-Waterman, sequential two-pass pruning) ---
-sw_effective_shards() {
-  local n_query="$1"
-  local n_shards="$2"
-  if [[ "$n_shards" -le 1 || "$n_query" -le 1 ]]; then
-    echo 1
-  elif [[ "$n_query" -lt "$n_shards" ]]; then
-    echo "$n_query"
-  else
-    echo "$n_shards"
-  fi
-}
-
-# Run one SW pass; shards query FASTA when SW_SHARDS > 1.
 sw_run_pass() {
-  local out_sw_dir="$1"
-  local query_fasta="$2"
-  local target_fasta="$3"
-  local out_tsv="$4"
-  local pass_tag="$5"
-  local x_flag="${6:-}"
+  local query_fasta="$1"
+  local target_fasta="$2"
+  local out_tsv="$3"
+  local pass_tag="$4"
+  local -a sw_cmd=()
 
-  local n_query n_shards threads shard_dir k sw_fail=0
-  local -a pids=() sw_extra=()
-  n_query=$(grep -c "^>" "$query_fasta" || true)
-  n_shards=$(sw_effective_shards "$n_query" "$SW_SHARDS")
-  read -ra sw_extra <<< "$(profile_cfg SW_EXTRA "-s BL62 -z 3 -f -11 -g -1")"
-  if [[ "$n_shards" -le 1 ]]; then
-    threads="$SW_CORES"
-  else
-    threads=$((SW_CORES / n_shards))
-  fi
-
-  if [[ "$n_shards" -le 1 ]]; then
-    if [[ "$SW_LEGACY" == "1" ]]; then
-      $FASTA_DIR/ssearch36 -m 8 -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        "$query_fasta" "$target_fasta" > "$out_tsv"
-    else
-      $FASTA_DIR/ssearch36 -m 8 -q -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        "${sw_extra[@]}" -X "$x_flag" \
-        "$query_fasta" "$target_fasta" > "$out_tsv"
-    fi
-    return
-  fi
-
-  shard_dir="$(mktemp -d "${TMPDIR:-/tmp}/chisel_sw.XXXXXX")"
-
-  awk -v d="$shard_dir" -v n="$n_shards" \
-    '/^>/ { i++ } { print >> sprintf("%s/q_%d.fasta", d, (i-1)%n+1) }' "$query_fasta"
-
-  for (( k=1; k<=n_shards; k++ )); do
-    [[ ! -s "${shard_dir}/q_${k}.fasta" ]] && continue
-    if [[ "$SW_LEGACY" == "1" ]]; then
-      $FASTA_DIR/ssearch36 -m 8 -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        "${shard_dir}/q_${k}.fasta" "$target_fasta" > "${shard_dir}/out_${k}.tsv" &
-    else
-      $FASTA_DIR/ssearch36 -m 8 -q -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" \
-        "${sw_extra[@]}" -X "$x_flag" \
-        "${shard_dir}/q_${k}.fasta" "$target_fasta" > "${shard_dir}/out_${k}.tsv" &
-    fi
-    pids+=($!)
-  done
-  for pid in "${pids[@]}"; do
-    wait "$pid" || sw_fail=1
-  done
-  [[ "$sw_fail" -eq 0 ]] || { log_detail "Error: ssearch36 shard failed (${pass_tag})"; exit 1; }
-
-  : > "$out_tsv"
-  for (( k=1; k<=n_shards; k++ )); do
-    [[ -s "${shard_dir}/out_${k}.tsv" ]] && cat "${shard_dir}/out_${k}.tsv" >> "$out_tsv"
-  done
-
-  if [[ -z "$KEEP_INTERMEDIATES" ]]; then
-    rm_rf_retry "$shard_dir"
+  sw_cmd=(
+    -m 8 -T "$SW_CORES" -E "$E_VALUE" -Z "$Z_SIZE"
+  )
+  append_profile_extras sw_cmd SW_EXTRA
+  sw_cmd+=("$query_fasta" "$target_fasta")
+  if ! $FASTA_DIR/ssearch36 "${sw_cmd[@]}" > "$out_tsv"; then
+    log_detail "Error: ssearch36 failed (${pass_tag})"
+    exit 1
   fi
 }
 
@@ -741,25 +668,15 @@ run_sw() {
   pass2_ids="${out_sw}/sw_pass2_hits_${TASK_ID}.txt"
   remove_pruned="${out_sw}/sw_remove_pass1_${TASK_ID}.fasta"
 
-  if [[ "$SW_LEGACY" == "1" ]]; then
-    sw_run_pass "$out_sw" "$remove_file" "$other_file" \
-      "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1"
-  else
-    sw_run_pass "$out_sw" "$remove_file" "$other_file" \
-      "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1" "$(profile_cfg SW_PASS1_X early_stop)"
-  fi
+  sw_run_pass "$remove_file" "$other_file" \
+    "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" "pass1"
   awk '{print $1}' "${out_sw}/sw_hits_pass1_${TASK_ID}.tsv" | sort -u > "$pass1_ids"
   pass1_hits=$(wc -l < "$pass1_ids")
   remove_seqs_bash "$remove_file" "$pass1_ids" "$remove_pruned"
   check_fasta_nonempty "$remove_pruned" "Smith-Waterman pass 1"
 
-  if [[ "$SW_LEGACY" == "1" ]]; then
-    sw_run_pass "$out_sw" "$other_file" "$remove_pruned" \
-      "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2"
-  else
-    sw_run_pass "$out_sw" "$other_file" "$remove_pruned" \
-      "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2" "$(profile_cfg SW_PASS2_X all_hits)"
-  fi
+  sw_run_pass "$other_file" "$remove_pruned" \
+    "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" "pass2"
   awk '{print $2}' "${out_sw}/sw_hits_pass2_${TASK_ID}.tsv" | sort -u > "$pass2_ids"
   pass2_hits=$(wc -l < "$pass2_ids")
   local total_removed=$((pass1_hits + pass2_hits))

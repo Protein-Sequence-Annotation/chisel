@@ -4,9 +4,7 @@
 # Usage:
 #   install/install_external.sh <CHISEL_dir>
 #
-# FASTA36: FASTA36_MODE=custom (default, bundled CHISEL tree) or legacy (upstream + patch).
-#   Optional: FASTA36_CUSTOM_REPO / FASTA36_CUSTOM_REF when the CHISEL fork is published.
-#   Legacy: FASTA36_LEGACY_REPO / FASTA36_LEGACY_REF (defaults: wrpearson/fasta36, master).
+# FASTA36: clones upstream wrpearson/fasta36, patches, builds — see install/fasta36_install.sh.
 #
 # Routes to:
 #   install/linux/install_external_linux.sh

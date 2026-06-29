@@ -419,6 +419,9 @@ main(int argc, char **argv)
 
   /* Read sequences into database */
   status = read_cust(dbfp, sqdb);
+  if (status == eslENOSPACE)
+    p7_Fail("Failed to read target sequences: --dbblock %d is smaller than the number of sequences in the database\n",
+            esl_opt_GetInteger(go, "--dbblock"));
   if (status != eslOK) p7_Fail("Failed to read target sequences from database");
   esl_sqfile_Close(dbfp);
   
@@ -442,7 +445,10 @@ main(int argc, char **argv)
     else if (status == eslEINVAL)    p7_Fail("Can't autodetect format of a stdin or .gz seqfile");
     else if (status != eslOK)        p7_Fail("Unexpected error %d opening train sequence database file %s\n", status, fname);
 
-    read_cust(fp, train_db);
+    status = read_cust(fp, train_db);
+    if (status == eslENOSPACE)
+      p7_Fail("Failed to read train sequences: preload block capacity %d is smaller than the number of sequences in %s\n",
+              train_db->listSize, fname);
     if (status != eslOK) p7_Fail("Failed to read train sequences from database");
     esl_sqfile_Close(fp);
   }
@@ -462,7 +468,10 @@ main(int argc, char **argv)
     else if (status == eslEINVAL)    p7_Fail("Can't autodetect format of a stdin or .gz seqfile");
     else if (status != eslOK)        p7_Fail("Unexpected error %d opening test sequence database file %s\n", status, fname);
     
-    read_cust(fp, test_db);
+    status = read_cust(fp, test_db);
+    if (status == eslENOSPACE)
+      p7_Fail("Failed to read test sequences: preload block capacity %d is smaller than the number of sequences in %s\n",
+              test_db->listSize, fname);
     if (status != eslOK) p7_Fail("Failed to read test sequences from database");
     esl_sqfile_Close(fp);
   }
@@ -482,7 +491,10 @@ main(int argc, char **argv)
     else if (status == eslEINVAL)    p7_Fail("Can't autodetect format of a stdin or .gz seqfile");
     else if (status != eslOK)        p7_Fail("Unexpected error %d opening val sequence database file %s\n", status, fname);
 
-    read_cust(fp, val_db);
+    status = read_cust(fp, val_db);
+    if (status == eslENOSPACE)
+      p7_Fail("Failed to read val sequences: preload block capacity %d is smaller than the number of sequences in %s\n",
+              val_db->listSize, fname);
     if (status != eslOK) p7_Fail("Failed to read val sequences from database");
     esl_sqfile_Close(fp);
   }
