@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Clone upstream FASTA36, apply GCC patch, build ssearch36, install to bin/.
+# Clone upstream FASTA36 into external_tools/fasta36/, apply GCC patch, build ssearch36.
 #
 # Usage:
 #   install/fasta36_install.sh <chisel_dir> <makefile-relative-to-src>...
@@ -56,16 +56,16 @@ fasta36_apply_patch() {
 
   [[ -f "${patch}" ]] || return 0
   need_cmd patch
-  if patch -d "${src_root}" -p1 --reverse --dry-run --force --silent <"${patch}" 2>/dev/null; then
+
+  # Skip reverse dry-run probe (it prints scary "hunk FAILED" on fresh clones).
+  if patch -d "${src_root}" -p1 --reverse --dry-run --force <"${patch}" >/dev/null 2>&1; then
     log "patch already applied (${patch})"
     return 0
   fi
-  if patch -d "${src_root}" -p1 --forward --dry-run --force --silent <"${patch}" 2>/dev/null; then
-    log "applying ${patch}"
-    patch -d "${src_root}" -p1 --forward --force <"${patch}" || die "fasta36 GCC prototype patch failed"
-  else
-    die "patch does not apply cleanly to ${src_root} (${patch})"
-  fi
+
+  log "applying ${patch}"
+  patch -d "${src_root}" -p1 --forward --force <"${patch}" \
+    || die "fasta36 GCC prototype patch failed"
 }
 
 fasta36_install() {
@@ -74,8 +74,7 @@ fasta36_install() {
   local -a makefiles=("$@")
   local external="${chisel_dir}/external_tools"
   local workdir="${external}/.downloads"
-  local src_root="${external}/fasta36-src"
-  local bin_dir="${external}/fasta36/bin"
+  local src_root="${external}/fasta36"
   local patch="${chisel_dir}/install/patches/fasta36-gcc-prototypes.patch"
   local repo="${FASTA36_REPO:-https://github.com/wrpearson/fasta36.git}"
   local ref="${FASTA36_REF:-master}"
@@ -88,13 +87,9 @@ fasta36_install() {
   need_cmd git
   need_cmd patch
 
-  # Drop any bundled source trees; only bin/ + fasta36-src from clone are used.
-  rm -rf "${external}/fasta36_experimental"
-  if [[ -d "${external}/fasta36" ]]; then
-    find "${external}/fasta36" -mindepth 1 -maxdepth 1 ! -name bin -exec rm -rf {} +
-  fi
-  rm -rf "${src_root}" "${clone_dir}"
-  mkdir -p "${workdir}" "${bin_dir}"
+  # Replace prior install (legacy layout used fasta36-src/ + bin-only fasta36/).
+  rm -rf "${external}/fasta36-src" "${src_root}" "${clone_dir}"
+  mkdir -p "${workdir}"
 
   log "cloning ${repo} (${ref})"
   if ! git clone --depth 1 --branch "${ref}" "${repo}" "${clone_dir}" 2>/dev/null; then
@@ -106,9 +101,7 @@ fasta36_install() {
   fasta36_try_build "${src_root}" "${makefiles[@]}" \
     || die "fasta36 build failed in ${src_root}"
 
-  cp -f "${src_root}/bin/ssearch36" "${bin_dir}/ssearch36"
-  chmod +x "${bin_dir}/ssearch36"
-  log "installed ssearch36 -> ${bin_dir}/ssearch36"
+  log "installed ssearch36 -> ${src_root}/bin/ssearch36"
 }
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
