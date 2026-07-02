@@ -8,6 +8,8 @@
 /build-config.mk
 # Test run logs and artifacts (see install/test_installation.sh)
 /install/info/
+/install/chisel.config
+/install/test_filter.config
 
 # Local helper; not intended for the remote (use for bulk commits/pushes)
 /combo_commit.sh

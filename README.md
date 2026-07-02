@@ -81,7 +81,7 @@ Executables land in `bin/`:
 | `chisel_build` | Split + filter pipeline |
 | `chisel_filter` | Multi-tool filter (`p` / `m` / `b` / `s` steps) |
 | `chisel_dedup` | Self-deduplication |
-| `chisel_splitter` | Standalone splitter |
+| `chisel_splitter` | Standalone pHMMER splitter |
 | `phmmer_filter` | Standalone pHMMER filter |
 
 Add `bin` to your `PATH` or call tools with full paths:
@@ -142,7 +142,7 @@ make config          # writes install/chisel.config and install/test_filter.conf
 
 Re-run after cloning or moving the repo. `make all` and `make install-external` also refresh configs when templates change.
 
-Pass the generated file to any pipeline script:
+**Example for running different scripts**
 
 | Script | Example |
 |--------|---------|
@@ -150,7 +150,7 @@ Pass the generated file to any pipeline script:
 | `chisel_dedup` | `chisel_dedup --config install/chisel.config --file test.fasta [--output-dir out/]` |
 | `chisel_filter` | `chisel_filter --config install/chisel.config --order mbps --fixed-file test.fasta --db-file train.fasta` |
 
-Phase-specific tuning uses separate prefixes in one config file:
+Phase-specific commandline options in config file:
 
 | Prefix | Used by |
 |--------|---------|
@@ -167,7 +167,9 @@ Common variables: `E_VALUE`, `Z_SIZE`, `PHMMER_CORES`, `MMSEQS_CORES`, `BLAST_CO
 
 ## Quick start
 
-Generate config, then run the end-to-end build pipeline:
+Generate default config, then run the pipeline end-to-end (Phase 1-3):
+
+**Phase 1: Build validation and test set**
 
 ```bash
 make config
@@ -176,20 +178,21 @@ chisel_build --config install/chisel.config --input-db seqDB.fasta --output-dir 
 
 Outputs: `results/train.fasta`, `results/test.fasta`, `results/val.fasta`, `results/discard.fasta`.
 
-**Standalone multi-tool filter** (pHMMER → MMseqs2 → BLAST → Smith–Waterman):
+**Phase 2: Self-deduplicate validation and test files from Phase 1:**
+
+```bash
+chisel_dedup --config install/chisel.config --file results/val.fasta
+chisel_dedup --config install/chisel.config --file results/test.fasta
+```
+
+**Phase 3: Grow train set** (MMseqs2 → BLASTp → pHMMER → ssearch36):
 
 ```bash
 chisel_filter --config install/chisel.config --order pmbs \
   --fixed-file test.fasta --db-file train_candidates.fasta
 ```
 
-**Self-deduplicate a FASTA file:**
-
-```bash
-chisel_dedup --config install/chisel.config --file sequences.fasta
-```
-
-**Standalone splitter** (low-level):
+**Standalone splitter** (pHMMER based unidirectional splitter):
 
 ```bash
 chisel_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_dir results seqDB.fasta
@@ -278,15 +281,15 @@ Low-level splitter for one input FASTA into train / test / val / discard. Used i
 | `-o <prefix>` | `-` | Prefix for stats / summary output files |
 | `-Z <n>` | *inferred from `--dbblock`* | Effective database size for E-value calculation |
 | `--cpu <n>` | `1` | Worker threads |
-| `--dbblock <n>` | `1000` | Sequences per database block |
-| `--test_limit <n>` | `75000` | Minimum test sequences before stopping |
-| `--val_limit <n>` | `10000` | Minimum validation sequences |
-| `--init_chunk <n>` | `10` | Sequences considered per assignment round |
+| `--dbblock <n>` | `10000` | Sequences per database block |
+| `--test_limit <n>` | `500` | Minimum test sequences before stopping |
+| `--val_limit <n>` | `100` | Minimum validation sequences |
+| `--init_chunk <n>` | `50` | Sequences considered per assignment round |
 | `--seed <n>` | `42` | RNG seed (`0` = one-time random seed) |
 | `--suppress` | off | Disable progress bar |
 | `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.) |
 | `--output_dir <dir>` | — | Write train/test/val/discard under `<dir>` |
-| `-E <x>` | `10.0` | E-value threshold for significant hits |
+| `-E <x>` | `0.01` | E-value threshold for significant hits |
 | `--plow`, `--phigh` | `0.0` | PID window for accepting sequences |
 
 For all options: `chisel_splitter -h`.
@@ -312,7 +315,7 @@ One of `qdb` or `tdb` may be `-` (stdin), not both.
 |--------|---------|-------------|
 | `-o <prefix>` | `-` | Output prefix for result files |
 | `-Z <n>` | *inferred* | Database size for E-value calibration |
-| `-E <x>` | `10.0` | Reporting E-value threshold |
+| `-E <x>` | `0.01` | Reporting E-value threshold |
 | `--cpu <n>` | `1` | Threads |
 | `--qsize <n>` | `1` | Queries per thread per batch |
 | `--format <n>` | `1` | Output format (see below) |
