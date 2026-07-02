@@ -145,6 +145,7 @@ PHMMER_CORES="${PHMMER_CORES:-96}"
 MMSEQS_CORES="${MMSEQS_CORES:-96}"
 BLAST_CORES="${BLAST_CORES:-96}"
 SW_CORES="${SW_CORES:-96}"
+SW_SHARDS="${SW_SHARDS:-8}"
 BLAST_DBSIZE="${BLAST_DBSIZE:-32596740121}"
 BLAST_MAX_TARGET_SEQS="${BLAST_MAX_TARGET_SEQS:-12000000}"
 MMSEQS_MAX_SEQS="${MMSEQS_MAX_SEQS:-12000000}"
@@ -204,6 +205,14 @@ fi
 if [[ "${NEED_SW}" -eq 1 ]]; then
   if [[ ! -d "${FASTA_DIR}" ]] || [[ ! -x "${FASTA_DIR}/ssearch36" ]]; then
     echo "FASTA_DIR must be a directory containing ssearch36: ${FASTA_DIR}" >&2
+    exit 1
+  fi
+  if ! is_positive_uint "$SW_SHARDS"; then
+    echo "SW_SHARDS must be a positive integer (got: ${SW_SHARDS:-})" >&2
+    exit 1
+  fi
+  if (( SW_CORES % SW_SHARDS != 0 )); then
+    echo "SW_CORES (${SW_CORES}) must be evenly divisible by SW_SHARDS (${SW_SHARDS}) when ssearch (s) is in --order" >&2
     exit 1
   fi
 fi
@@ -635,16 +644,82 @@ sw_run_pass() {
   local target_fasta="$2"
   local out_tsv="$3"
   local pass_tag="$4"
+  local n_query n_active_shards threads shard_dir k pid
+  local shard_target shard_out
   local -a sw_cmd=()
+  local -a pids=()
 
-  sw_cmd=(
-    -m 8 -T "$SW_CORES" -E "$E_VALUE" -Z "$Z_SIZE"
-  )
+  n_query=$(grep -c '^>' "$query_fasta" || true)
+  if (( n_query == 0 )); then
+    : > "$out_tsv"
+    return 0
+  fi
+
+  n_active_shards="$SW_SHARDS"
+  if (( n_query < n_active_shards )); then
+    n_active_shards="$n_query"
+  fi
+  threads=$(( SW_CORES / SW_SHARDS ))
+
+  sw_cmd=( -m 8 -T "$threads" -E "$E_VALUE" -Z "$Z_SIZE" )
   append_profile_extras sw_cmd SW_EXTRA
-  sw_cmd+=("$query_fasta" "$target_fasta")
-  if ! $FASTA_DIR/ssearch36 "${sw_cmd[@]}" > "$out_tsv"; then
-    log_detail "Error: ssearch36 failed (${pass_tag})"
+
+  if (( n_active_shards == 1 )); then
+    sw_cmd+=("$query_fasta" "$target_fasta")
+    if ! $FASTA_DIR/ssearch36 "${sw_cmd[@]}" > "$out_tsv"; then
+      log_detail "Error: ssearch36 failed (${pass_tag})"
+      exit 1
+    fi
+    return 0
+  fi
+
+  shard_dir="$(mktemp -d "${TMPDIR:-/tmp}/chisel_sw.XXXXXX")"
+  awk "/^>/ { i++ } { print >> sprintf(\"${shard_dir}/q_%d.fasta\", (i-1)%${n_active_shards}+1) }" \
+    "$query_fasta"
+
+  log_detail "ssearch36 ${pass_tag}: ${n_active_shards} shards x ${threads} threads (query seqs=${n_query})"
+
+  : > "$out_tsv"
+  for (( k=1; k<=n_active_shards; k++ )); do
+    [[ -s "${shard_dir}/q_${k}.fasta" ]] || continue
+    shard_target="${shard_dir}/t_${k}.fasta"
+    shard_out="${shard_dir}/out_${k}.tsv"
+    cp -f "$target_fasta" "$shard_target"
+    $FASTA_DIR/ssearch36 "${sw_cmd[@]}" \
+      "${shard_dir}/q_${k}.fasta" "$shard_target" \
+      > "$shard_out" 2>"${shard_dir}/ssearch_${k}.log" &
+    pids+=($!)
+  done
+
+  if ((${#pids[@]} == 0)); then
+    log_detail "Error: no ssearch36 shards started (${pass_tag})"
     exit 1
+  fi
+
+  for pid in "${pids[@]}"; do
+    if ! wait "$pid"; then
+      log_detail "Error: ssearch36 shard failed (${pass_tag}, pid=${pid})"
+      for (( k=1; k<=n_active_shards; k++ )); do
+        if [[ -f "${shard_dir}/ssearch_${k}.log" ]]; then
+          log_detail "--- ssearch36 shard ${k} log (last 20 lines) ---"
+          tail -20 "${shard_dir}/ssearch_${k}.log" >&2
+        fi
+      done
+      exit 1
+    fi
+  done
+
+  for (( k=1; k<=n_active_shards; k++ )); do
+    [[ -s "${shard_dir}/out_${k}.tsv" ]] || continue
+    cat "${shard_dir}/out_${k}.tsv" >> "$out_tsv"
+  done
+
+  if [[ -n "${KEEP_INTERMEDIATES:-}" ]]; then
+    local keep_dir="${OUT_DIR}/sw_${OUT_SUFFIX}/sw_shard_${pass_tag}_${TASK_ID}"
+    mkdir -p "$(dirname "$keep_dir")"
+    mv "$shard_dir" "$keep_dir"
+  else
+    rm_rf_retry "$shard_dir"
   fi
 }
 

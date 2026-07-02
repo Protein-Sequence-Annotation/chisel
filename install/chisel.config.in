@@ -38,6 +38,8 @@ PHMMER_CORES="96"
 MMSEQS_CORES="96"
 BLAST_CORES="96"
 SW_CORES="96"
+# Parallel ssearch36 processes (query shards); threads per shard = SW_CORES / SW_SHARDS
+SW_SHARDS="8"
 
 # --- Tool binaries / directories (filled by make config) ---
 PHMMER_FILTER="@CHISEL_ROOT@/bin/phmmer_filter"

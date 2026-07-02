@@ -18,6 +18,7 @@ PHMMER_CORES="1"
 MMSEQS_CORES="1"
 BLAST_CORES="1"
 SW_CORES="1"
+SW_SHARDS="1"
 
 PHMMER_FILTER="@CHISEL_ROOT@/bin/phmmer_filter"
 MMSEQS="@CHISEL_ROOT@/external_tools/mmseqs/bin/mmseqs"
