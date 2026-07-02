@@ -1,100 +1,114 @@
-# Sledge
+# CHISEL
 
-Sledge splits protein sequence databases into train / test / (optional) validation sets (`sledge_splitter`), scores and filters sequence pairs with a pHMMER-based engine (`phmmer_filter`), and orchestrates multi-tool filtering pipelines (`sledge_filter`: pHMMER, MMseqs2, BLAST, FASTA `ssearch36`). Sledge is released under the MIT License (see [License](#license)).
+CHISEL splits protein sequence databases into train / test / validation sets, filters sequence pairs for homology, and builds publication-ready benchmark splits. The suite includes:
+
+| Tool | Role |
+|------|------|
+| `chisel_build` | End-to-end pipeline: split → filter test/val/train |
+| `chisel_filter` | Multi-tool filter (pHMMER, MMseqs2, BLAST+, Smith–Waterman) |
+| `chisel_dedup` | Self-deduplicate a FASTA file |
+| `chisel_splitter` | Low-level Profmark-style splitter (used by `chisel_build`) |
+| `phmmer_filter` | Low-level pHMMER-based pairwise filter |
+
+CHISEL is released under the MIT License (see [License](#license)).
 
 ## Citation
 
-To cite Sledge, please use:
+To cite CHISEL, please use:
 
-> [SLEDGE_CITATION_PLACEHOLDER]
+> [CHISEL_CITATION_PLACEHOLDER]
 >
-> [SLEDGE_PAPER_LINK_PLACEHOLDER]
+> [CHISEL_PAPER_LINK_PLACEHOLDER]
 
 ---
 
 ## Acknowledgements
 
-We would like to thank the developers of [HMMER3](http://hmmer.org) <sup><a href="#ref-eddy-2011">1</a></sup> for the EASEL tools and base pHMMER pipeline that have been customized for `sledge_splitter` and `sledge_filter`.
+We thank the developers of [HMMER3](http://hmmer.org) <sup><a href="#ref-eddy-2011">1</a></sup> for the EASEL tools and base pHMMER pipeline customized for `chisel_splitter` and `chisel_filter`.
 
 ---
 
 ## OS support matrix
 
-| OS | Build support | `sledge_filter` support | External tools support | Notes |
-|----|---------------|-------------------------|------------------------|-------|
+| OS | Build support | Pipeline scripts | External tools | Notes |
+|----|---------------|------------------|----------------|-------|
 | Linux (x86_64) | Official | Official | Official | Primary supported platform. |
 | macOS (Apple Silicon / Intel) | Official | Official | Official | Use Homebrew/system packages for dependencies. |
 | Windows (WSL2) | Official (via Linux in WSL2) | Official (via Bash in WSL2) | Official (via Linux in WSL2) | Recommended Windows path. |
-| Windows (native) | Planned | Planned | Planned | Not currently first-class; requires separate installers and shell adaptations. |
+| Windows (native) | Planned | Planned | Planned | Not currently first-class. |
 
 ---
 
 ## Requirements
 
-**Core build tools (all supported platforms)**  
+**Core build tools (all supported platforms)**
 - C compiler (`gcc`/`clang`)
 - GNU `make`
 - `ar`, `ranlib`
-- Bash (for `sledge_filter` and install helpers)
+- Bash (for pipeline scripts and install helpers)
 - `pthread` and math library (`-lm`)
 
-**Runtime dependencies for `sledge_filter`**  
+**Runtime dependencies for `chisel_filter`**
 - [MMseqs2](https://github.com/soedinglab/MMseqs2)
 - [NCBI BLAST+](https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/) (`makeblastdb`, `blastp`)
 - [FASTA package](https://github.com/wrpearson/fasta36) (`ssearch36`)
 
-Refer to the [external tools](#external-tools) section for installation through `make`.
+Install external tools via `make install-external` (see below).
 
 ---
 
 ## Installation
 
-### 1) Clone and build core binaries
+### 1) Clone and build
 
 ```bash
-git clone https://github.com/sledgeseq/sledge.git
-cd sledge/ # adjust if your repo root differs
+git clone https://github.com/Protein-Sequence-Annotation/chisel.git
+cd chisel
 ./configure   # detects CPU (SSE on x86_64, NEON on aarch64/arm64); writes build-config.mk
 make
 ```
 
-**Shell (bash vs zsh):** It does not matter whether you use bash or zsh as your login shell. `./configure` has a `#!/usr/bin/env bash`, so it always runs under bash. The same commands work in Terminal with zsh.
+`./configure` always runs under bash (`#!/usr/bin/env bash`); your login shell does not matter.
 
-**If you see “Permission denied” when running scripts:** run `make install-scripts` once after cloning (sets executable bits on `configure` and `install/*.sh`). `make install-external` and `make test-install` run this automatically.
+**Permission denied on scripts?** Run `make install-scripts` once after cloning. `make install-external` and `make test-install` do this automatically. You can also invoke scripts as `bash configure`.
 
-You can also invoke scripts via `bash <script>` (for example, `bash configure`).
-
-Re-run `./configure` after changing machines or if you want to force a backend (`./configure --with-impl=sse` or `--with-impl=neon`). `make distclean` removes `build-config.mk` as well as build products.
+Re-run `./configure` after changing machines or to force a backend (`./configure --with-impl=sse` or `--with-impl=neon`). `make distclean` removes `build-config.mk` and build products.
 
 Executables land in `bin/`:
 
 | Binary | Role |
 |--------|------|
-| `sledge_splitter` | Profmark-style split of one FASTA DB into train / test / val |
-| `phmmer_filter` | Pairwise sequence similarity filter using HMMER |
-| `sledge_filter` | Shell pipeline: configurable order of p / m / b / s steps |
+| `chisel_build` | Split + filter pipeline |
+| `chisel_filter` | Multi-tool filter (`p` / `m` / `b` / `s` steps) |
+| `chisel_dedup` | Self-deduplication |
+| `chisel_splitter` | Standalone splitter |
+| `phmmer_filter` | Standalone pHMMER filter |
 
 Add `bin` to your `PATH` or call tools with full paths:
 
 ```bash
-export PATH="/path/to/sledge/bin:$PATH"
+export PATH="/path/to/chisel/bin:$PATH"
 ```
 
-### 2) Install external tools (MMseqs2, BLAST+, FASTA/ssearch36)
-
-Install external tools through the Makefile:
+### 2) Install external tools
 
 ```bash
 make install-external
 ```
 
-### External tools
+This installs MMseqs2, BLAST+, and FASTA36 into `chisel/external_tools` by default.
 
-This installs MMseqs2, BLAST+, and FASTA tools into `sledge/external_tools` by default.
+**Linux** (`install/linux/install_external_linux.sh`) selects downloads from `uname -m`: **x86_64** uses MMseqs2 `sse2` binaries and NCBI **x64-linux** BLAST; **aarch64**/**arm64** uses MMseqs2 **arm64** and NCBI **aarch64-linux** BLAST. Override with `MMSEQS_ARCH` (e.g. `avx2`) or `BLAST_PLATFORM` if needed.
 
-**Linux** (`install/linux/install_external_linux.sh`) selects downloads from `uname -m`: **x86_64** uses MMseqs2 `sse2` binaries and NCBI **x64-linux** BLAST; **aarch64**/**arm64** uses MMseqs2 **arm64** and NCBI **aarch64-linux** BLAST, and builds FASTA36 with non-SSE makefiles. Override MMseqs flavor with `MMSEQS_ARCH` (e.g. `avx2` on capable x86_64) or NCBI tarball name with `BLAST_PLATFORM` if needed.
+**macOS:** `install/macos/install_external_macos.sh` prefers **Homebrew** for MMseqs2 and BLAST+; otherwise falls back to upstream tarballs. FASTA36 is built from source.
 
-If external tools are already installed, point Chisel tools at them in your config (see `install/chisel.config`):
+**Windows (WSL2):**
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install\windows\install_external_windows.ps1 -ChiselDir C:\path\to\chisel
+```
+
+If external tools are already installed, point CHISEL at them in your config (see [Configuration](#configuration)):
 
 | Config key | Set this to |
 |------------|-------------|
@@ -102,75 +116,31 @@ If external tools are already installed, point Chisel tools at them in your conf
 | `BLAST_DIR` | Directory containing `makeblastdb` and `blastp` |
 | `FASTA_DIR` | Directory containing `ssearch36` |
 
-`sledge_filter` can also run on a subset of tools. Only the tools used in `--order` need to be installed.
-
-`make install-external` uses the cross-platform installer dispatcher under `install/`.
-You can still call the dispatcher directly if needed:
+Only the tools listed in `--order` need to be installed. You can also call the dispatcher directly:
 
 ```bash
-./install/install_external.sh /path/to/sledge
-```
-
-The bundled Sledge FASTA36 source ships as **`install/fasta36-sledge.zip`** (query-parallel `ssearch36`). `make install-external` extracts it to `external_tools/fasta36` and builds by default (`FASTA36_MODE=custom`).
-
-When you publish a GitHub fork of the Sledge fasta36 tree, point the installer at it instead of the zip:
-
-```bash
-FASTA36_CUSTOM_REPO=https://github.com/YOURORG/fasta36-sledge.git make install-external
-```
-
-For upstream FASTA36 with GCC compatibility patches (no Sledge query-parallel changes), use legacy mode:
-
-```bash
-FASTA36_MODE=legacy make install-external
-```
-
-Set `SW_LEGACY=1` in `install/chisel.config` when using the legacy binary. Optional overrides: `FASTA36_LEGACY_REPO`, `FASTA36_LEGACY_REF`, `FASTA36_CUSTOM_REF`, `FASTA36_ZIP`.
-
-To repack the zip after editing a local tree under `external_tools/fasta36`:
-
-```bash
-(cd external_tools/fasta36 && zip -r ../install/fasta36-sledge.zip . \
-  -x 'bin/ssearch36' 'src/*.o' 'src/*.oo' 'src/*.a')
-```
-
-**macOS:** `install/macos/install_external_macos.sh` installs MMseqs2 and BLAST+ via **Homebrew** (`brew`, native for Intel vs Apple Silicon) when available, and otherwise falls back to direct upstream tarball downloads (`mmseqs-osx-universal`, `ncbi-blast-<version>+-x64-macosx` by default). FASTA36 is built from source, choosing FASTA makefiles by **`uname -m`** (ARM Macs no longer prefer x86-only makefiles first). Optional overrides: `MMSEQS_TAG`, `MMSEQS_MACOS_ASSET`, `BLAST_VERSION`, `BLAST_PLATFORM`.
-
-On Windows, run the PowerShell entrypoint (WSL2-backed flow):
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install\windows\install_external_windows.ps1 -SledgeDir C:\path\to\sledge
+./install/install_external.sh /path/to/chisel
 ```
 
 ### 3) Run installation tests
-
-After building binaries and configuring/installing external tools:
 
 ```bash
 make test-install
 ```
 
-`make test-install` auto-detects OS:
-- Linux/macOS: runs `install/test_installation.sh`
-- Windows: routes to `install/windows/test_installation_windows.ps1` (WSL2-backed)
-
-Direct Windows entrypoint is still available if needed:
-
-```powershell
-powershell -ExecutionPolicy Bypass -File .\install\windows\test_installation_windows.ps1 -SledgeDir C:\path\to\sledge
-```
+Linux/macOS runs `install/test_installation.sh`; Windows routes through WSL2 via `install/windows/test_installation_windows.ps1`.
 
 ---
 
 ## Configuration
 
-Defaults live in **`install/chisel.config.in`** (and **`install/test_filter.config.in`** for tests). Generate runnable configs with absolute paths:
+Defaults live in **`install/chisel.config.in`**. Generate runnable configs with absolute paths:
 
 ```bash
 make config          # writes install/chisel.config and install/test_filter.config
 ```
 
-Re-run after cloning or moving the repo. `make all` and `make install-external` also refresh configs when the `.in` templates change.
+Re-run after cloning or moving the repo. `make all` and `make install-external` also refresh configs when templates change.
 
 Pass the generated file to any pipeline script:
 
@@ -180,146 +150,159 @@ Pass the generated file to any pipeline script:
 | `chisel_dedup` | `chisel_dedup --config install/chisel.config --file test.fasta [--output-dir out/]` |
 | `chisel_filter` | `chisel_filter --config install/chisel.config --order mbps --fixed-file test.fasta --db-file train.fasta` |
 
-Each script reads only the variables it needs. Phase-specific tool tuning uses separate prefixes in one config:
+Phase-specific tuning uses separate prefixes in one config file:
 
 | Prefix | Used by |
 |--------|---------|
-| `SPLIT_*`, `SPLITTER_EXTRA` | `chisel_build` (splitter) |
+| `SPLIT_*`, `SPLITTER_EXTRA` | `chisel_build` (splitter step) |
 | `BUILD_FILTER_*` | `chisel_build` filter steps (`CHISEL_PROFILE=build`) |
 | `FILTER_*` | standalone `chisel_filter` |
-| `DEDUP_PHMMER_*`, `DEDUP_PHMMER_EXTRA` | `chisel_dedup` |
+| `DEDUP_*` | `chisel_dedup` |
 
-Named parameters (`*_PHMMER_PHIGH`, `*_PHMMER_PLOW`, `*_PHMMER_QSIZE`) cover pHMMER tuning for both filter passes; `*_PHMMER_EXTRA` appends optional flags. Pass 2 still adds `--all_hits` in the script.
+Common variables: `E_VALUE`, `Z_SIZE`, `PHMMER_CORES`, `MMSEQS_CORES`, `BLAST_CORES`, `SW_CORES`, `SW_SHARDS`, `REMOVE_TARGET` (`db` or `fixed`), `ORDER` (for `chisel_build`).
 
-**Log output:** `chisel_build`, `chisel_dedup`, and `chisel_filter` print progress summaries (step labels, timing, sequence counts) on **stdout** and tool verbose output on **stderr**. With SLURM, point `#SBATCH --output` at stdout and `#SBATCH --error` at stderr to keep summaries in the `.out` file.
+**Log output:** `chisel_build`, `chisel_dedup`, and `chisel_filter` print progress summaries on **stdout** and tool verbose output on **stderr**. With SLURM, point `#SBATCH --output` at stdout and `#SBATCH --error` at stderr.
 
 ---
 
 ## Quick start
 
-**Splitter — one input DB, written train/test/val under the current directory**
+Generate config, then run the end-to-end build pipeline:
 
 ```bash
-sledge_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_dir results seqDB.fasta
+make config
+chisel_build --config install/chisel.config --input-db seqDB.fasta --output-dir results/
 ```
 
-**Multi-tool pipeline — order `pmbs` (pHMMER → MMseqs2 → BLAST → Smith–Waterman)**
+Outputs: `results/train.fasta`, `results/test.fasta`, `results/val.fasta`, `results/discard.fasta`.
+
+**Standalone multi-tool filter** (pHMMER → MMseqs2 → BLAST → Smith–Waterman):
 
 ```bash
-sledge_filter --order pmbs --config pipeline.config --fixed-file test.fasta --db-file train_candidates.fasta
+chisel_filter --config install/chisel.config --order pmbs \
+  --fixed-file test.fasta --db-file train_candidates.fasta
+```
+
+**Self-deduplicate a FASTA file:**
+
+```bash
+chisel_dedup --config install/chisel.config --file sequences.fasta
+```
+
+**Standalone splitter** (low-level):
+
+```bash
+chisel_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_dir results seqDB.fasta
 ```
 
 ---
 
-## `sledge_splitter`
+## `chisel_build`
+
+Splits an input database, then runs three `chisel_filter` passes to remove cross-set homologs. Final outputs: `train.fasta`, `test.fasta`, `val.fasta`, `discard.fasta` in `--output-dir`.
+
+| Option | Description |
+|--------|-------------|
+| `--config <file>` | Config file (required) |
+| `--input-db <fasta>` | Input sequence database (required) |
+| `--output-dir <dir>` | Output directory (required) |
+
+Splitter and filter settings come from the config (`SPLIT_*`, `ORDER`, `BUILD_FILTER_*`, etc.).
+
+---
+
+## `chisel_filter`
+
+Runs pHMMER, MMseqs2, BLAST+, and/or Smith–Waterman in the order given by `--order`. Each tool performs two-pass pruning: search the removal side as query, prune hits, then run the reverse direction against the pruned file before moving to the next tool.
+
+### Required arguments
+
+| Option | Description |
+|--------|-------------|
+| `--order <string>` | Tool order: `p` = pHMMER, `m` = MMseqs2, `b` = BLAST+, `s` = Smith–Waterman (`ssearch36`). Example: `pmbs`, `mbps`. |
+| `--config <file>` | Config file |
+| `--fixed-file <fasta>` | Fixed/reference side (e.g. test set) |
+| `--db-file <fasta>` | Database to filter against the fixed set |
+
+### Optional arguments
+
+| Option | Description |
+|--------|-------------|
+| `--out-suffix <name>` | Suffix for per-tool output dirs; defaults to `TASK_ID` from config |
+
+### Key config variables
+
+| Variable | Role |
+|----------|------|
+| `OUT_DIR` | Base directory for outputs (required) |
+| `REMOVE_TARGET` | `db` or `fixed` — which side loses sequences after hits |
+| `PHMMER_FILTER`, `MMSEQS`, `BLAST_DIR`, `FASTA_DIR` | Tool paths |
+| `E_VALUE`, `Z_SIZE` | E-value threshold and database size calibration |
+| `PHMMER_CORES`, `MMSEQS_CORES`, `BLAST_CORES`, `SW_CORES` | Thread counts |
+| `SW_SHARDS` | Parallel `ssearch36` shards (`SW_CORES` must be divisible by `SW_SHARDS`) |
+| `FILTER_PHMMER_PHIGH`, `FILTER_PHMMER_PLOW`, `FILTER_PHMMER_QSIZE`, `FILTER_PHMMER_EXTRA` | pHMMER tuning (standalone) |
+| `FILTER_MMSEQS_*`, `FILTER_BLASTP_EXTRA`, `FILTER_SW_EXTRA` | Per-tool extras |
+
+See `src/chisel_filter.sh` for full defaults and behavior.
+
+---
+
+## `chisel_dedup`
+
+Removes within-file homologs using `phmmer_filter` with `--no_self`. Writes `<stem>_dedup.fasta` (e.g. `test.fasta` → `test_dedup.fasta`).
+
+| Option | Description |
+|--------|-------------|
+| `--config <file>` | Config file (required) |
+| `--file <fasta>` | Input FASTA (required) |
+| `--output-dir <dir>` | Output directory (default: same directory as input) |
+
+Tuning via `DEDUP_PHIGH`, `DEDUP_PLOW`, `DEDUP_QSIZE`, `DEDUP_EXTRA` in config.
+
+---
+
+## `chisel_splitter`
+
+Low-level splitter for one input FASTA into train / test / val / discard. Used internally by `chisel_build`; call directly for custom split workflows.
 
 ### Required arguments
 
 | Argument | Description |
 |----------|-------------|
-| `<seqdb>` | One input protein sequence file (positional; must be last). |
+| `<seqdb>` | Input protein sequence file (positional; must be last) |
 
-### Essential options (typical runs)
+### Essential options
 
 | Option | Default | Description |
-|--------|---------|---------------|
-| `-o <prefix>` | `-` | Prefix for stats / summary output files (e.g. `stats` → `stats_0.txt`). |
-| `-Z <n>` | *inferred from --dbblock* | Effective database size for E-value calculation. |
-| `--cpu <n>` | `1` | Worker threads. |
-| `--dbblock <n>` | `1000` | Number of sequences in database. |
-| `--test_limit <n>` | `75000` | Stop once at least this many sequences are assigned to **test**. |
-| `--val_limit <n>` | `10000` | Stop once at least this many are assigned to **validation** (unless disabled). |
-| `--init_chunk <n>` | `10` | Sequences considered for assignment at one go |
-| `--seed <n>` | `42` | RNG seed (`0` = one-time random seed). |
-| `--suppress` | off | Disable progress bar. |
-| `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.). |
+|--------|---------|-------------|
+| `-o <prefix>` | `-` | Prefix for stats / summary output files |
+| `-Z <n>` | *inferred from `--dbblock`* | Effective database size for E-value calculation |
+| `--cpu <n>` | `1` | Worker threads |
+| `--dbblock <n>` | `1000` | Sequences per database block |
+| `--test_limit <n>` | `75000` | Minimum test sequences before stopping |
+| `--val_limit <n>` | `10000` | Minimum validation sequences |
+| `--init_chunk <n>` | `10` | Sequences considered per assignment round |
+| `--seed <n>` | `42` | RNG seed (`0` = one-time random seed) |
+| `--suppress` | off | Disable progress bar |
+| `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.) |
+| `--output_dir <dir>` | — | Write train/test/val/discard under `<dir>` |
+| `-E <x>` | `10.0` | E-value threshold for significant hits |
+| `--plow`, `--phigh` | `0.0` | PID window for accepting sequences |
 
-### Output paths
-
-| Option | Description |
-|--------|-------------|
-| `--output_dir <dir>` | Write `train`, `test`, `val`, `discard` under `<dir>` (with default basenames unless overridden). |
-| `--train_path`, `--test_path`, `--val_path`, `--discard_path` | Basename prefixes for the four FASTA streams (defaults: `train`, `test`, `val`, `discard`). |
-
-### Similarity / scoring (pHMMER-style)
-
-| Option | Description |
-|--------|-------------|
-| `-E <x>` | Treat hits with E-value ≤ `x` as significant. |
-| `--plow`, `--phigh` | PID window for accepting a sequence into the train/test/val set (see `-h` for interaction with the algorithm). |
-
-### Resume / debug
-
-| Option | Description |
-|--------|-------------|
-| `--load_tr`, `--load_te`, `--load_val` | Resume from existing train/test/val FASTA (`-` = none). |
-| `--halt <n>` | Process at most `n` sequences (debug). |
-| `--resume <n>` | Start after sequence index `n`. |
-| `--freq <n>` | Progress update frequency. |
-
-For complete set of options: run `sledge_splitter -h`.
-
----
-
-## `sledge_filter` (pipeline script)
-
-### Required CLI arguments
-
-| Option | Description |
-|--------|-------------|
-| `--order <string>` | Tool order: `p` = pHMMER (`phmmer_filter`), `m` = MMseqs2, `b` = BLAST+, `s` = Smith–Waterman (`ssearch36`). Example: `pmbs`, `spm`. |
-| `--config <file>` | Bash-sourced config (see below). |
-| `--fixed-file <fasta>` | “Fixed” side (e.g. reference or test set). |
-| `--db-file <fasta>` | Database to filter against the fixed set. |
-
-### Optional CLI
-
-| Option | Description |
-|--------|-------------|
-| `--out-suffix <name>` | Suffix for per-tool output dirs (`phmmer_<suffix>`, …); defaults to `TASK_ID` from config. |
-
-### Config file (required variables)
-
-`OUT_DIR` must be set (base directory for outputs). Typically also set:
-
-| Variable | Role |
-|----------|------|
-| `PHMMER_FILTER` | Path to `phmmer_filter` binary. |
-| `MMSEQS` | MMseqs2 executable. |
-| `BLAST_DIR` | Directory containing `makeblastdb` and `blastp`. |
-| `FASTA_DIR` | Directory containing `ssearch36`. |
-| `TASK_ID` | Integer or `SLURM` (uses `SLURM_ARRAY_TASK_ID`). |
-| `REMOVE_TARGET` | `db` or `fixed` — which side sequences are removed from after hits. |
-| `E_VALUE` | E-value threshold (shared across tools where applicable). |
-| `Z_SIZE` | Positive integer; used for pHMMER / SW calibration. |
-| `SLEDGE_CORES`, `MMSEQS_CORES`, `BLAST_CORES`, `SW_CORES` | Thread counts for each tool. |
-| `BLAST_DBSIZE`, `BLAST_MAX_TARGET_SEQS`, `MMSEQS_MAX_SEQS` | BLAST / MMseqs2 tuning. |
-
-Optional: `KEEP_INTERMEDIATES`, `USE_LONG_ID`, etc. (see script header in `src/sledge_filter.sh`).
-
-**Minimal example config**
-
-```bash
-OUT_DIR="./filter_run_out"
-PHMMER_FILTER="/path/to/sledge_minimal/bin/phmmer_filter"
-MMSEQS="mmseqs"
-BLAST_DIR="/path/to/ncbi-blast/bin"
-FASTA_DIR="/path/to/fasta/bin"
-TASK_ID=0
-```
+For all options: `chisel_splitter -h`.
 
 ---
 
 ## `phmmer_filter`
 
-If you are not interested in using a suite of tools to filter and want to use just the optimized PHMMER filter for different functionalities, refer to the documentation below.
+Standalone pHMMER-based pairwise filter. Used internally by `chisel_filter` and `chisel_dedup`.
 
 ### Required arguments
 
 | Argument | Description |
 |----------|-------------|
-| `<qdb>` | Query sequence database (first positional). |
-| `<tdb>` | Target sequence database (second positional). |
+| `<qdb>` | Query sequence database (first positional) |
+| `<tdb>` | Target sequence database (second positional) |
 
 One of `qdb` or `tdb` may be `-` (stdin), not both.
 
@@ -327,99 +310,66 @@ One of `qdb` or `tdb` may be `-` (stdin), not both.
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `-o <prefix>` | `-` | Output prefix for result files. |
-| `-Z <n>` | *inferred from database by default* | Database size for E-value calibration. |
-| `-E <x>` | `10.0` | Reporting E-value threshold. |
-| `--cpu <n>` | `1` | Threads. |
-| `--qsize <n>` | `1` | Queries per thread per batch. |
-| `--qblock <n>` | `10` | Query block size. |
-| `--tblock <n>` | `1000` | Target block size. |
-| `--format <n>` | `1` | Output format (see below). |
-| `--all_hits` | off | Do not stop early on first failing comparison (when applicable). |
-| `--task_id <id>` | `0` | Shard id in output filenames. |
-| `--seed <n>` | `42` | RNG seed. |
-| `--suppress` | off | Disable progress bar. |
+| `-o <prefix>` | `-` | Output prefix for result files |
+| `-Z <n>` | *inferred* | Database size for E-value calibration |
+| `-E <x>` | `10.0` | Reporting E-value threshold |
+| `--cpu <n>` | `1` | Threads |
+| `--qsize <n>` | `1` | Queries per thread per batch |
+| `--format <n>` | `1` | Output format (see below) |
+| `--all_hits` | off | Report all hits, not just first failure |
+| `--no_self` | off | Ignore self-comparison (used by `chisel_dedup`) |
+| `--plow`, `--phigh` | `0.0` | PID limits for accepting sequences |
 
 ### Output formats (`--format`)
 
 | Value | Meaning |
-|------|---------|
-| `0` | Per-sequence ACCEPT/REJECT string. |
-| `1` | Full information for rejected hits (default). |
-| `2` | IDs of accepted sequences. |
-| `3` | IDs of rejected queries. |
-| `4` | IDs of rejected targets (e.g. with `--all_hits`). |
+|-------|---------|
+| `0` | Per-sequence ACCEPT/REJECT string |
+| `1` | Full information for rejected hits (default) |
+| `2` | IDs of accepted sequences |
+| `3` | IDs of rejected queries |
+| `4` | IDs of rejected targets (with `--all_hits`) |
 
-### Input formats
-
-`--qformat` / `--tformat` force Easel format names (e.g. `fasta`) and skip autodetection.
+For all options: `phmmer_filter -h`.
 
 ---
 
 ## Example use cases
 
-1. **Splitter — train/val/test from a single database**  
-   Build disjoint splits for benchmarking: tune `--test_limit`, `--val_limit`, `-Z`, and `--cpu` for large DBs.
+1. **Benchmark split from one database** — `chisel_build` with tuned `SPLIT_TEST_LIMIT`, `SPLIT_VAL_LIMIT`, and `SPLIT_CPU` in config.
 
-   ```bash
-   sledge_splitter -Z 1e6 --cpu 16 --test_limit 5000 --val_limit 1000 -o run stats_db.fasta
-   ```
+2. **Filter training candidates against a fixed test set** — `chisel_filter` with `REMOVE_TARGET=db` and strict `E_VALUE` / `Z_SIZE`.
 
-2. **Filter — large dissimilar training set given a fixed test set**  
-   Run `sledge_filter` with `REMOVE_TARGET=db` and strict `E_VALUE` / `Z_SIZE` so the “db” FASTA loses sequences similar to the test set (after pHMMER / MMseqs / BLAST / SW as ordered).
+3. **Remove overlap between two FASTA sets** — point `--fixed-file` and `--db-file` at the two pools; set `REMOVE_TARGET` to drop hits from either side.
 
-3. **Filter — remove overlap between any two FASTA sets**  
-   Point `--fixed-file` and `--db-file` at the two pools; choose `REMOVE_TARGET` to drop hits from either side.
+4. **Out-of-distribution evaluation** — split with `chisel_build`, or filter training candidates with `chisel_filter` / `phmmer_filter` to strip test-set homologs.
 
-4. **Splitter / filter — out-of-distribution (OOD) evaluation**  
-   Use the splitter to hold out a test set; use `sledge_filter` or `phmmer_filter` to strip training candidates that match the test set, giving a cleaner OOD evaluation. Alternatively, prune the test set with respect to the train set to get a subset of OOD sequences. You can also deduplicate a set of sequences by removing ones that have high sequence similarity to each other within a set (this would involve filtering a set with itself).
+5. **Within-set deduplication** — `chisel_dedup` on a FASTA file, or `chisel_filter` / `phmmer_filter` with the same file as both query and target.
 
-5. **Strictness, order, and tool subset**  
-   - **Strictness:** lower `E_VALUE`, appropriate `Z_SIZE`, and `BLAST_DBSIZE` / MMseqs e-value scaling in the script.  
-   - **Order:** e.g. `p` only for fast homology removal; `pmbs` for a long cascade.  
-   - **Speed** MMSeqs2 is the fastest of the tools, followed by BLAST and PHMMER (our modified implementation) in similar order of magnitude. Smith-Waterman based filtering by ssearch is the slowest part of this process. User can choose the tools and order as required.
-   - **Subset:** omit letters (e.g. `pm` skips BLAST and SW).
-
-6. **Stratification / reporting**  
-   Use `phmmer_filter` `--format` modes and `-E` / `-Z` to export accept/reject IDs or full hit tables; combine with downstream scripts to bin by PID or E-value from the tabular output. Our customized pHMMER filter allows reporting results in different forms. We have not modified the source code of MMSeqs2, BLAST and ssearch36.
+6. **Tool order and speed** — MMseqs2 is fastest, then BLAST and pHMMER, then Smith–Waterman. Use `p` alone for fast homology removal, or `pmbs` for a full cascade. Omit letters to skip tools (e.g. `pm` skips BLAST and SW).
 
 ---
 
 ## Further help
 
 ```bash
-sledge_splitter -h
+chisel_splitter -h
 phmmer_filter -h
+chisel_build --help
+chisel_dedup --help
 ```
 
-For sledge_filter pipeline behavior and defaults, read the comments at the top of `src/sledge_filter.sh`.
+For `chisel_filter` pipeline behavior and defaults, read the header of `src/chisel_filter.sh`.
 
 ---
 
 ## FASTA36 build notes
 
-Sledge ships a modified [FASTA36](external_tools/fasta36) tree (query-parallel `ssearch36`, BL62/Karlin–Altschul defaults). Installers build via `install/fasta36_install.sh`:
+`make install-external` builds FASTA36 from upstream [wrpearson/fasta36](https://github.com/wrpearson/fasta36) with a GCC compatibility patch (`install/patches/fasta36-gcc-prototypes.patch`). Output: `external_tools/fasta36/bin/ssearch36`.
 
-| `FASTA36_MODE` | Source | Output |
-|----------------|--------|--------|
-| `custom` (default) | Bundled `external_tools/fasta36` | `external_tools/fasta36/bin/ssearch36` |
-| `legacy` | Clone [wrpearson/fasta36](https://github.com/wrpearson/fasta36) + patch | `external_tools/fasta36/bin/ssearch36` (source under `fasta36-src/`) |
+Optional overrides: `FASTA36_REPO`, `FASTA36_REF` (see `install/fasta36_install.sh`).
 
-When the Sledge fork is published separately, set `FASTA36_CUSTOM_REPO` (and optionally `FASTA36_CUSTOM_REF`) to fetch it instead of the bundled tree.
-
-See [external_tools/fasta36/README_SLEDGE.md](external_tools/fasta36/README_SLEDGE.md) for manual build commands and chisel-oriented flags.
-
-### Legacy GCC patch
-
-Upstream FASTA36 predates strict ISO C defaults on recent GCC/Clang. Legacy mode applies `install/patches/fasta36-gcc-prototypes.patch` after cloning. Requires **`git`**, **`patch`**, and **`make`** on `PATH`.
-
-| Item | Location |
-|------|----------|
-| Patch | `install/patches/fasta36-gcc-prototypes.patch` |
-| Default upstream ref | `FASTA36_LEGACY_REF=master` |
-| Installer | `install/fasta36_install.sh` (used by Linux/macOS scripts) |
-
-If upstream changes the patched files, regenerate the diff from a clean checkout of the target ref and retry `FASTA36_MODE=legacy make install-external`.
+Upstream FASTA36 predates strict ISO C defaults on recent GCC/Clang. Legacy mode requires **`git`**, **`patch`**, and **`make`** on `PATH`. If upstream changes the patched files, regenerate the diff and retry `make install-external`.
 
 ---
 
