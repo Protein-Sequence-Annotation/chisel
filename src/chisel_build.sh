@@ -118,7 +118,7 @@ split_args=(
   --init_chunk "$SPLIT_INIT_CHUNK"
   --test_limit "$SPLIT_TEST_LIMIT"
   --val_limit "$SPLIT_VAL_LIMIT"
-  --seed "$SPLIT_SEED"
+  --split-seed "$SPLIT_SEED"
   -Z "$SPLIT_Z"
   -o stats
 )

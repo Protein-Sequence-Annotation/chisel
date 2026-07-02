@@ -238,7 +238,7 @@ check_prereqs || exit 2
 # chisel_build tests
 # ---------------------------
 # Shared splitter flags (no -Z / output dir here so invalid -Z and custom-path tests can vary).
-SPLIT_BASE_OPTS="--seed 42 --suppress"
+SPLIT_BASE_OPTS="--split-seed 42 --suppress"
 # Standard runs: save default split FASTAs in each artifact test-case directory.
 COMMON_SPLITTER_NO_Z="${SPLIT_BASE_OPTS} --output_dir ."
 COMMON_SPLITTER="${COMMON_SPLITTER_NO_Z} -Z 500000"

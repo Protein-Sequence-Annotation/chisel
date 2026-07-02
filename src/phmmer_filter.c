@@ -47,7 +47,7 @@ static ESL_OPTIONS options[] = {
   { "--mx",           eslARG_STRING, "BLOSUM62", NULL, NULL,        NULL,  NULL,  "--mxfile",        "substitution score matrix choice (of some built-in matrices)", 3 },
   { "--mxfile",       eslARG_INFILE,       NULL, NULL, NULL,        NULL,  NULL,  "--mx",            "read substitution score matrix from file <f>",                 3 },
 /* Control of reporting thresholds */
-  { "-E",             eslARG_REAL,       "10.0", NULL, "x>0",       NULL,  NULL,  REPOPTS,           "report sequences <= this E-value threshold in output",         4 },
+  { "-E",             eslARG_REAL,       "0.01", NULL, "x>0",       NULL,  NULL,  REPOPTS,           "report sequences <= this E-value threshold in output",         4 },
   { "-T",             eslARG_REAL,        FALSE, NULL,  NULL,       NULL,  NULL,  REPOPTS,           "report sequences >= this score threshold in output",           4 },
   { "--domE",         eslARG_REAL,       "10.0", NULL, "x>0",       NULL,  NULL,  DOMREPOPTS,        "report domains <= this E-value threshold in output",           4 },
   { "--domT",         eslARG_REAL,        FALSE, NULL,  NULL,       NULL,  NULL,  DOMREPOPTS,        "report domains >= this score cutoff in output",                4 },
@@ -95,7 +95,7 @@ static ESL_OPTIONS options[] = {
   { "--nonull2",      eslARG_NONE,        NULL,  NULL, NULL,        NULL,  NULL,  NULL,              "turn off biased composition score corrections",               12 },
   { "-Z",             eslARG_REAL,       FALSE,  NULL, "x>0",       NULL,  NULL,  NULL,              "set # of comparisons done, for E-value calculation",          12 },
   { "--domZ",         eslARG_REAL,       FALSE,  NULL, "x>0",       NULL,  NULL,  NULL,              "set # of significant seqs, for domain E-value calculation",   12 },
-  { "--seed",         eslARG_INT,         "42",  NULL, "n>=0",      NULL,  NULL,  NULL,              "set RNG seed to <n> (if 0: one-time arbitrary seed)",         12 },
+  { "--seed",         eslARG_INT,         "42",  NULL, "n>=0",      NULL,  NULL,  NULL,              "RNG seed for internal pHMMER pipeline (0=arbitrary)",         12 },
   { "--qformat",      eslARG_STRING,      NULL,  NULL, NULL,        NULL,  NULL,  NULL,              "assert query <seqfile> is in format <s>: no autodetection",   12 },
   { "--tformat",      eslARG_STRING,      NULL,  NULL, NULL,        NULL,  NULL,  NULL,              "assert target <seqdb> is in format <s>>: no autodetection",   12 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },

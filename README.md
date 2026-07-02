@@ -154,7 +154,7 @@ Phase-specific commandline options in config file:
 
 | Prefix | Used by |
 |--------|---------|
-| `SPLIT_*`, `SPLITTER_EXTRA` | `chisel_build` (splitter step) |
+| `SPLIT_*`, `SPLITTER_EXTRA` | `chisel_build` (splitter step); `SPLIT_SEED` → `--split-seed` |
 | `BUILD_FILTER_*` | `chisel_build` filter steps (`CHISEL_PROFILE=build`) |
 | `FILTER_*` | standalone `chisel_filter` |
 | `DEDUP_*` | `chisel_dedup` |
@@ -285,7 +285,8 @@ Low-level splitter for one input FASTA into train / test / val / discard. Used i
 | `--test_limit <n>` | `500` | Minimum test sequences before stopping |
 | `--val_limit <n>` | `100` | Minimum validation sequences |
 | `--init_chunk <n>` | `50` | Sequences considered per assignment round |
-| `--seed <n>` | `42` | RNG seed (`0` = one-time random seed) |
+| `--split-seed <n>` | `0` | RNG seed for train/test/val assignment (`0` = random each run) |
+| `--seed <n>` | `42` | RNG seed for internal pHMMER pipeline (`0` = arbitrary) |
 | `--suppress` | off | Disable progress bar |
 | `--task_id <id>` | `0` | Suffix for output files (`*_0.fasta`, etc.) |
 | `--output_dir <dir>` | — | Write train/test/val/discard under `<dir>` |
@@ -322,6 +323,7 @@ One of `qdb` or `tdb` may be `-` (stdin), not both.
 | `--all_hits` | off | Report all hits, not just first failure |
 | `--no_self` | off | Ignore self-comparison (used by `chisel_dedup`) |
 | `--plow`, `--phigh` | `0.0` | PID limits for accepting sequences |
+| `--seed <n>` | `42` | RNG seed for internal pHMMER pipeline (`0` = arbitrary) |
 
 ### Output formats (`--format`)
 

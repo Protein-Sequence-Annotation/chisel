@@ -67,7 +67,7 @@ static ESL_OPTIONS options[] = {
   { "--mx",           eslARG_STRING, "BLOSUM62", NULL, NULL,      NULL,  NULL,  "--mxfile",         "substitution score matrix choice (of some built-in matrices)", 3 },
   { "--mxfile",       eslARG_INFILE,       NULL, NULL, NULL,      NULL,  NULL,  "--mx",             "read substitution score matrix from file <f>",                 3 },
 /* Control of reporting thresholds */
-  { "-E",             eslARG_REAL,       "10.0", NULL, "x>0",     NULL,  NULL,  REPOPTS,            "report sequences <= this E-value threshold in output",         4 },
+  { "-E",             eslARG_REAL,       "0.01", NULL, "x>0",     NULL,  NULL,  REPOPTS,            "report sequences <= this E-value threshold in output",         4 },
   { "-T",             eslARG_REAL,        FALSE, NULL,  NULL,     NULL,  NULL,  REPOPTS,            "report sequences >= this score threshold in output",           4 },
   { "--domE",         eslARG_REAL,       "10.0", NULL, "x>0",     NULL,  NULL,  DOMREPOPTS,         "report domains <= this E-value threshold in output",           4 },
   { "--domT",         eslARG_REAL,        FALSE, NULL,  NULL,     NULL,  NULL,  DOMREPOPTS,         "report domains >= this score cutoff in output",                4 },
@@ -96,12 +96,12 @@ static ESL_OPTIONS options[] = {
   { "--Eft",          eslARG_REAL,       "0.04", NULL,"0<x<1",    NULL,  NULL,  NULL,               "tail mass for Forward exponential tail tau fit",              11 },   
 /* Sledgehmmer specific options */
   { "--qblock",       eslARG_INT,        "10",    NULL, NULL,      NULL,  NULL,  NULL,              "max queries handled at a time",                               12 },
-  { "--dbblock",      eslARG_INT,        "1000",  NULL, NULL,      NULL,  NULL,  NULL,              "max targets handled at a time",                               12 },
+  { "--dbblock",      eslARG_INT,        "10000", NULL, NULL,      NULL,  NULL,  NULL,              "max targets handled at a time",                               12 },
   { "--halt",         eslARG_INT,        "-1",    NULL, NULL,      NULL,  NULL,  NULL,              "stop after n sequences - for debugging",                      12 },
   { "--resume",       eslARG_INT,        "0",     NULL, NULL,      NULL,  NULL,  NULL,              "resume from nth sequence",                                    12 },
-  { "--test_limit",   eslARG_INT,        "75000", NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of test sequences",                   12 },
-  { "--val_limit",    eslARG_INT,        "10000", NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of validation sequences",             12 },
-  { "--init_chunk",   eslARG_INT,        "10",    NULL, NULL,      NULL,  NULL,  NULL,              "query chunk size till test limit",                            12 },
+  { "--test_limit",   eslARG_INT,        "500",   NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of test sequences",                   12 },
+  { "--val_limit",    eslARG_INT,        "100",   NULL, NULL,      NULL,  NULL,  NULL,              "required minimum number of validation sequences",             12 },
+  { "--init_chunk",   eslARG_INT,        "50",    NULL, NULL,      NULL,  NULL,  NULL,              "query chunk size till test limit",                            12 },
   { "--suppress",     eslARG_NONE,       FALSE,   NULL, NULL,      NULL,  NULL,  NULL,              "turn off progress bar",                                       12 },
   { "--task_id",      eslARG_INT,        "0",     NULL, NULL,      NULL,  NULL,  NULL,              "slurm array task ID or shard number",                         12 },
   { "--shard_id",     eslARG_STRING,     "",      NULL, NULL,      NULL,  NULL,  NULL,              "second level shard number as a string",                       12 },
@@ -122,7 +122,8 @@ static ESL_OPTIONS options[] = {
   { "--nonull2",      eslARG_NONE,        NULL,  NULL, NULL,      NULL,  NULL,  NULL,               "turn off biased composition score corrections",               12 },
   { "-Z",             eslARG_REAL,       FALSE,  NULL, "x>0",     NULL,  NULL,  NULL,               "set # of comparisons done, for E-value calculation",          12 },
   { "--domZ",         eslARG_REAL,       FALSE,  NULL, "x>0",     NULL,  NULL,  NULL,               "set # of significant seqs, for domain E-value calculation",   12 },
-  { "--seed",         eslARG_INT,         "42",  NULL, "n>=0",    NULL,  NULL,  NULL,               "set RNG seed to <n> (if 0: one-time arbitrary seed)",         12 },
+  { "--split-seed",   eslARG_INT,         "0",   NULL, "n>=0",    NULL,  NULL,  NULL,               "RNG seed for train/test/val assignment (0=random)",           12 },
+  { "--seed",         eslARG_INT,         "42",  NULL, "n>=0",    NULL,  NULL,  NULL,               "RNG seed for internal pHMMER pipeline (0=arbitrary)",         12 },
   { "--qformat",      eslARG_STRING,      NULL,  NULL, NULL,      NULL,  NULL,  NULL,               "assert query <seqfile> is in format <s>: no autodetection",   12 },
   { "--tformat",      eslARG_STRING,      NULL,  NULL, NULL,      NULL,  NULL,  NULL,               "assert target <seqdb> is in format <s>>: no autodetection",   12 },
   {  0, 0, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -560,7 +561,7 @@ main(int argc, char **argv)
     p7_Fail("Failed to allocate temporary sequence buffers");
 
   /* Create seeded random generator for the rest of the code to use */
-  rnd = esl_randomness_Create(esl_opt_GetInteger (go, "--seed"));
+  rnd = esl_randomness_Create(esl_opt_GetInteger (go, "--split-seed"));
 
   /* Open the discard file for permanent writing */
 
