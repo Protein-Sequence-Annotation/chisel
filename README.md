@@ -4,7 +4,7 @@ CHISEL splits protein sequence databases into train / test / validation sets, fi
 
 | Tool | Role |
 |------|------|
-| `chisel_build` | End-to-end pipeline: split → filter test/val/train |
+| `chisel_build` | Phase 1: sample test/val from input DB, de-overlap splits |
 | `chisel_filter` | Multi-tool filter (pHMMER, MMseqs2, BLAST+, Smith–Waterman) |
 | `chisel_dedup` | Self-deduplicate a FASTA file |
 | `chisel_splitter` | Low-level Profmark-style splitter (used by `chisel_build`) |
@@ -78,7 +78,7 @@ Executables land in `bin/`:
 
 | Binary | Role |
 |--------|------|
-| `chisel_build` | Split + filter pipeline |
+| `chisel_build` | Phase 1: sample test/val, de-overlap splits |
 | `chisel_filter` | Multi-tool filter (`p` / `m` / `b` / `s` steps) |
 | `chisel_dedup` | Self-deduplication |
 | `chisel_splitter` | Standalone pHMMER splitter |
@@ -167,32 +167,38 @@ Common variables: `E_VALUE`, `Z_SIZE`, `PHMMER_CORES`, `MMSEQS_CORES`, `BLAST_CO
 
 ## Quick start
 
-Generate default config, then run the pipeline end-to-end (Phase 1-3):
+Generate default config, then run the three-phase workflow:
 
-**Phase 1: Build validation and test set**
+**Phase 1: Build test and validation sets**
+
+`chisel_build` scans the input database only until `SPLIT_TEST_LIMIT` and `SPLIT_VAL_LIMIT` are satisfied. Sequences along the way are assigned to train, test, val, or discard; three filter passes then remove cross-set homologs among those outputs. The `train.fasta` written here contains only train assignments from that prefix of the database—not sequences from the unprocessed remainder.
 
 ```bash
 make config
 chisel_build --config install/chisel.config --input-db seqDB.fasta --output-dir results/
 ```
 
-Outputs: `results/train.fasta`, `results/test.fasta`, `results/val.fasta`, `results/discard.fasta`.
+Outputs: `results/test.fasta`, `results/val.fasta`, `results/train.fasta` (partial), `results/discard.fasta`.
 
-**Phase 2: Self-deduplicate validation and test files from Phase 1:**
+**Phase 2: Self-deduplicate test and validation sets**
 
 ```bash
 chisel_dedup --config install/chisel.config --file results/val.fasta
 chisel_dedup --config install/chisel.config --file results/test.fasta
 ```
 
-**Phase 3: Grow train set** (MMseqs2 → BLASTp → pHMMER → ssearch36):
+**Phase 3: Grow the training set from remaining sequences**
+
+Use `chisel_filter` on candidate sequences from the rest of the database (everything not already assigned in Phase 1). With `REMOVE_TARGET=db`, homologs of the fixed test set are removed from the candidate pool.
 
 ```bash
 chisel_filter --config install/chisel.config --order pmbs \
-  --fixed-file test.fasta --db-file train_candidates.fasta
+  --fixed-file results/test.fasta --db-file train_candidates.fasta
 ```
 
-**Standalone splitter** (pHMMER based unidirectional splitter):
+A full benchmark split is **Phase 1 + Phase 3** (and optionally Phase 2): `chisel_build` does not scan the entire database for training sequences.
+
+**Standalone splitter** (low-level pHMMER-based splitter):
 
 ```bash
 chisel_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_dir results seqDB.fasta
@@ -202,7 +208,11 @@ chisel_splitter --dbblock 100 --test_limit 20 --val_limit 10 -o stats --output_d
 
 ## `chisel_build`
 
-Splits an input database, then runs three `chisel_filter` passes to remove cross-set homologs. Final outputs: `train.fasta`, `test.fasta`, `val.fasta`, `discard.fasta` in `--output-dir`.
+Scans the input database until test and validation size limits are reached (`SPLIT_TEST_LIMIT`, `SPLIT_VAL_LIMIT`), assigning sequences along the way to train, test, val, or discard. It then runs three `chisel_filter` passes to remove cross-set homologs among those outputs.
+
+The `train.fasta` produced here covers only sequences assigned to train from the scanned prefix—it does **not** represent training sequences from the full database. Use `chisel_filter` (Phase 3) to add dissimilar training sequences from the remainder.
+
+Final outputs in `--output-dir`: `test.fasta`, `val.fasta`, `train.fasta`, `discard.fasta`.
 
 | Option | Description |
 |--------|-------------|
@@ -341,17 +351,15 @@ For all options: `phmmer_filter -h`.
 
 ## Example use cases
 
-1. **Benchmark split from one database** — `chisel_build` with tuned `SPLIT_TEST_LIMIT`, `SPLIT_VAL_LIMIT`, and `SPLIT_CPU` in config.
+1. **Benchmark test and validation sets** — Run `chisel_build` with tuned `SPLIT_TEST_LIMIT`, `SPLIT_VAL_LIMIT`, and `SPLIT_CPU` to sample and de-overlap test/val from the head of a database. Then use `chisel_filter` on remaining sequences to grow the training set.
 
 2. **Filter training candidates against a fixed test set** — `chisel_filter` with `REMOVE_TARGET=db` and strict `E_VALUE` / `Z_SIZE`.
 
 3. **Remove overlap between two FASTA sets** — point `--fixed-file` and `--db-file` at the two pools; set `REMOVE_TARGET` to drop hits from either side.
 
-4. **Out-of-distribution evaluation** — split with `chisel_build`, or filter training candidates with `chisel_filter` / `phmmer_filter` to strip test-set homologs.
+4. **Out-of-distribution evaluation** — use `chisel_build` for held-out test/val, then `chisel_filter` or `phmmer_filter` to strip homologs from training candidates.
 
 5. **Within-set deduplication** — `chisel_dedup` on a FASTA file, or `chisel_filter` / `phmmer_filter` with the same file as both query and target.
-
-6. **Tool order and speed** — MMseqs2 is fastest, then BLAST and pHMMER, then Smith–Waterman. Use `p` alone for fast homology removal, or `pmbs` for a full cascade. Omit letters to skip tools (e.g. `pm` skips BLAST and SW).
 
 ---
 
@@ -360,11 +368,12 @@ For all options: `phmmer_filter -h`.
 ```bash
 chisel_splitter -h
 phmmer_filter -h
-chisel_build --help
-chisel_dedup --help
+chisel_build -h
+chisel_filter -h
+chisel_dedup -h
 ```
 
-For `chisel_filter` pipeline behavior and defaults, read the header of `src/chisel_filter.sh`.
+(`-h` and `--help` are equivalent for the pipeline scripts.)
 
 ---
 

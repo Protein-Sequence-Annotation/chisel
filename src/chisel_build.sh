@@ -46,7 +46,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$CONFIG_FILE" && -n "$INPUT_DB" && -n "$OUTPUT_DIR" ]] \
-  || die "usage: $0 --config FILE --input-db FASTA --output-dir DIR"
+  || die "usage: $0 --config FILE --input-db FASTA --output-dir DIR (run -h for help)"
 
 [[ -f "$CONFIG_FILE" ]] || die "config not found: $CONFIG_FILE"
 [[ -f "$INPUT_DB" ]] || die "input database not found: $INPUT_DB"

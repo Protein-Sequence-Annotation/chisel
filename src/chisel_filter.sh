@@ -1,22 +1,25 @@
 #!/bin/bash
 #
 # chisel_filter.sh — Run pHMMER, MMseqs2, BLAST, and/or SW filters with sequential two-pass pruning.
-# Unlike sledge_filter.sh, each tool runs REMOVE-as-query first, prunes REMOVE, then runs the reverse
-# direction against the pruned REMOVE file and prunes again before the next tool.
+# Each tool runs REMOVE-as-query first, prunes REMOVE, then runs the reverse direction against
+# the pruned REMOVE file and prunes again before the next tool.
 #
 # Required: --order, --config, --fixed-file, --db-file. Other parameters come from the config file.
 #
 # Usage:
-#   --order STRING           Order of tools: p=phmmer, m=mmseqs, b=blast, s=sw (e.g. pmb, spm)
-#   --config FILE            Path to config file (required)
-#   --fixed-file FILE        Fixed/reference FASTA (e.g. test set)
-#   --db-file FILE           DB FASTA (shard / sequence database to be filtered against fixed file)
-#   --out-suffix SUFFIX      Optional. Suffix for tool output dirs (phmmer_<suffix>, mmseqs_<suffix>, etc.).
-#                            Default: TASK_ID from config. Use to separate outputs per run (e.g. 0_vs_0_0).
+#   chisel_filter.sh --order STRING --config FILE --fixed-file FASTA --db-file FASTA [--out-suffix SUFFIX]
 #
-# Example: ./chisel_filter.sh --order pmb --config install/chisel.config --fixed-file test.fasta --db-file train.fasta
+#   --order STRING       Tool order: p=phmmer, m=mmseqs, b=blast, s=sw (e.g. pmbs, mbps)
+#   --config FILE        Path to config file (required)
+#   --fixed-file FILE    Fixed/reference FASTA (e.g. test set)
+#   --db-file FILE       Database to filter against the fixed set
+#   --out-suffix SUFFIX  Optional suffix for per-tool output dirs (default: TASK_ID from config)
 #
-# Set OUT_DIR, REMOVE_TARGET (db|fixed), KEEP_INTERMEDIATES, etc. in the config file.
+# Example:
+#   chisel_filter --order pmbs --config install/chisel.config \
+#     --fixed-file test.fasta --db-file train_candidates.fasta
+#
+# Set OUT_DIR, REMOVE_TARGET (db|fixed), KEEP_INTERMEDIATES, FILTER_*, etc. in the config file.
 
 set -euo pipefail
 
@@ -53,6 +56,10 @@ OUT_SUFFIX_ARG=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
+    -h|--help)
+      sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
     --order)
       ORDER="$2"
       shift 2
@@ -81,8 +88,9 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$ORDER" || -z "$CONFIG_FILE" || -z "$FIXED_FILE" || -z "$DB_FILE" ]]; then
-  echo "Usage: $0 --order STRING --config FILE --fixed-file FILE --db-file FILE"
-  echo "  Order: p=phmmer, m=mmseqs, b=blast, s=sw (e.g. pmb, spm)"
+  echo "Usage: $0 --order STRING --config FILE --fixed-file FILE --db-file FILE [--out-suffix SUFFIX]" >&2
+  echo "  Order: p=phmmer, m=mmseqs, b=blast, s=sw (e.g. pmbs, mbps)" >&2
+  echo "Run $0 -h or $0 --help for details." >&2
   exit 1
 fi
 

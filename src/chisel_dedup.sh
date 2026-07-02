@@ -53,7 +53,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 [[ -n "$CONFIG_FILE" && -n "$INPUT_FILE" ]] \
-  || die "usage: $0 --config FILE --file FASTA [--output-dir DIR]"
+  || die "usage: $0 --config FILE --file FASTA [--output-dir DIR] (run -h for help)"
 
 [[ -f "$CONFIG_FILE" ]] || die "config not found: $CONFIG_FILE"
 [[ -f "$INPUT_FILE" ]] || die "input file not found: $INPUT_FILE"
